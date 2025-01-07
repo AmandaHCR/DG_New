@@ -1,0 +1,430 @@
+ DELETE
+FROM
+  `crowdriff-revops`.`bi_business`.`new_business_conversion_product1`
+WHERE
+  TRUE;
+  
+INSERT
+`crowdriff-revops`.`bi_business`.`new_business_conversion_product1`
+
+
+With tmp_activity_join as (
+Select a.*,
+o.HasUGC as Prospect_UGC,
+o.HasDam  as Prospect_DAM,
+o.HasStudio  as Prospect_Studio,
+o.HasCreators  as Prospect_Creators,
+o.ProductLine as Related_ProductLine,
+aa.productline as Active_Productline,
+case when aa.products like '%UGC%' then 'UGC' end as Active_UGC,
+case when aa.products like '%DAM%' then 'DAM' end as Active_DAM,
+case when aa.products like '%Studio%' then 'Studio' end as Active_Studio,
+case when aa.products like '%Creators%' then 'Creators' end as Active_Creators,
+case when aa.accountid is not null then 'Customer' end as Active_Customer,
+Case when time(CreatedTimestamp) = '00:00:00' then TIMESTAMP_SUB(TIMESTAMP_ADD(CreatedTimestamp, INTERVAL 24 HOUR), INTERVAL 1 SECOND)  else TIMESTAMP_TRUNC(CreatedTimestamp, SECOND) end  as CreatedTime_Trunc,
+Case when `RelatedOpportunityARR_USD`  >0 then po.PlatformARR_USD end as `RelatedPlatformARR_USD` ,
+Case when `RelatedOpportunityARR_USD`  >0 then po.CreatorARR_USD end as `RelatedCreatorARR_USD` ,
+coalesce(pf.PlatformARR_USD,po.PlatformARR_USD)  as `RelatedPipelinePlatformARR_USD` ,
+coalesce(pf.CreatorARR_USD,po.CreatorARR_USD)  as `RelatedPipelineCreatorARR_USD` ,
+coalesce(pf.PlatformARR_USD+pf.CreatorARR_USD+pf.VisionARR_USD,po.PlatformARR_USD+po.CreatorARR_USD+po.VisionARR_USD)  as `RelatedPipelineARR_USD` ,
+po.DiscoveryAcceptedDate as RelatedSAODate,
+o.HasVision  as Prospect_Vision,
+case when aa.products like '%Vision%' then 'Vision' end as Active_Vision,
+Case when `RelatedOpportunityARR_USD`  >0 then po.VisionARR_USD end as `RelatedVisionARR_USD` ,
+coalesce(pf.VisionARR_USD,po.VisionARR_USD)  as `RelatedPipelineVisionARR_USD`
+/*
+cast( null as string) as `EmailId`,
+cast( null as string) as CampaignName,
+cast( null as string) as CampaignType,
+cast(null as INT64) as HS_CampaignId,
+cast(null as date) as Email_LastTouchDate,
+cast(null as INT64) as Email_SecondsOpen,
+cast(null as INT64) as Email_UrlsClickedCount,
+cast(null as INT64) as Email_OpenCount,
+cast(null as INT64) as Email_ClickCount,
+cast(null as INT64) as Email_IsClicked,
+cast(null as INT64) as Email_IsOpened,
+cast(null as INT64) as Email_IsDelivered,
+cast(null as INT64) as Email_IsSent,
+cast(null as INT64) as Email_IsNotDelivered,
+cast(null as INT64) as Email_IsFlaggedSpam,
+cast(null as INT64) as Email_IsSubscribeChange,
+Cast(null as string) as page_url, 
+Cast(null as string) as url, 
+Cast(null as string) as utm_campaign, 
+Cast(null as string) as utm_source,  
+Cast(null as string) as utm_content,  
+Cast(null as string) as utm_medium,  
+Cast(null as string) as hsa_cam,  
+Cast(null as string) as hsa_grp, 
+Cast(null as string) as hsa_ad, 
+Cast(null as string) as hsa_src, 
+Cast(null as string) as hsa_net, 
+Cast(null as string) as hsa_ver,
+cast(null as date) as ContactLeadCreatedDate,
+cast (null as Boolean) as IsNewContact,
+cast(null as date) as AccountCreatedDate,
+cast (null as Boolean) as IsNewAccount,
+coalesce(o.LeadSource,Cast(null as string)) as RelatedOppLeadSource,
+Cast(null as string) as hsCtaTracking,  */
+from `crowdriff-revops`.`bi_business`.`activity_history_product1` as a
+left join `crowdriff-revops`.`bi_business`.`opportunity_details` as o on o.`OpportunityId` = RelatedOpportunityId
+left join (select OpportunityId, DiscoveryAcceptedDate, Sum(Case when Productline like 'Creator%' then (ARR_USD + OneTimeRevenue_USD) end) as CreatorARR_USD,
+Sum(Case when Productline like 'Vision%' then (ARR_USD + OneTimeRevenue_USD) end) as VisionARR_USD,
+sum(Case when Productline not like 'Creator%' and Productline not like 'Vision%'then (ARR_USD + OneTimeRevenue_USD) end) as PlatformARR_USD,
+from  `crowdriff-revops.bi_business.productline_opportunity_details`
+group by OpportunityId,DiscoveryAcceptedDate) as po on po.OpportunityId = RelatedOpportunityId
+left join   `crowdriff-revops.bi_business.monthly_active_accounts` as aa on aa.AccountId = a.AccountId and aa.MonthEnd = case when o.stagename = 'Closed Won' and a.activitydate >= o.CloseDate then  greatest(a.CalendarMonthEnd, last_day(o.licensestartdate,Month)) else date_trunc(a.CalendarMonthEnd, Month)-1  end
+left join  (select OpportunityId, CalendarDate,Sum(Case when Productline like 'Creator%' then (ARR_USD + OneTimeRevenue_USD) end) as CreatorARR_USD,Sum(Case when Productline like 'Vision%' then (ARR_USD + OneTimeRevenue_USD) end) as VisionARR_USD,
+sum(Case when Productline not like 'Creator%' and Productline not like 'Vision%' then (ARR_USD + OneTimeRevenue_USD) end) as PlatformARR_USD, from `crowdriff-revops.bi_business.productline_pipeline_daily` group by CalendarDate,OpportunityId) as pf on pf.OpportunityId = po.OpportunityId and pf.CalendarDate = greatest(date(po.DiscoveryAcceptedDate), "2023-08-01") 
+        UNION ALL
+Select a.*,
+o.HasUGC as Prospect_UGC,
+o.HasDam  as Prospect_DAM,
+o.HasStudio  as Prospect_Studio,
+o.HasCreators  as Prospect_Creators,
+o.ProductLine as Related_ProductLine,
+aa.productline as Active_Productline,
+case when aa.products like '%UGC%' then 'UGC' end as Active_UGC,
+case when aa.products like '%DAM%' then 'DAM' end as Active_DAM,
+case when aa.products like '%Studio%' then 'Studio' end as Active_Studio,
+case when aa.products like '%Creators%' then 'Creators' end as Active_Creators,
+case when aa.accountid is not null then 'Customer' end as Active_Customer,
+Case when time(CreatedTimestamp) = '00:00:00' then TIMESTAMP_SUB(TIMESTAMP_ADD(CreatedTimestamp, INTERVAL 24 HOUR), INTERVAL 1 SECOND)  else TIMESTAMP_TRUNC(CreatedTimestamp, SECOND) end  as CreatedTime_Trunc,
+Case when `RelatedOpportunityARR_USD`  >0 then po.PlatformARR_USD end as `RelatedPlatformARR_USD` ,
+Case when `RelatedOpportunityARR_USD`  >0 then po.CreatorARR_USD end as `RelatedCreatorARR_USD` ,
+coalesce(pf.PlatformARR_USD,po.PlatformARR_USD)  as `RelatedPipelinePlatformARR_USD` ,
+coalesce(pf.CreatorARR_USD,po.CreatorARR_USD)  as `RelatedPipelineCreatorARR_USD` ,
+coalesce(pf.PlatformARR_USD+pf.CreatorARR_USD+pf.VisionARR_USD,po.PlatformARR_USD+po.CreatorARR_USD+po.VisionARR_USD)  as `RelatedPipelineARR_USD` ,
+po.DiscoveryAcceptedDate as RelatedSAODate,
+o.HasVision  as Prospect_Vision,
+case when aa.products like '%Vision%' then 'Vision' end as Active_Vision,
+Case when `RelatedOpportunityARR_USD`  >0 then po.VisionARR_USD end as `RelatedVisionARR_USD` ,
+coalesce(pf.VisionARR_USD,po.VisionARR_USD)  as `RelatedPipelineVisionARR_USD`
+from `crowdriff-revops`.`bi_business`.`activity_history_hubspot_product1` as a
+left join `crowdriff-revops`.`bi_business`.`opportunity_details` as o on o.`OpportunityId` = RelatedOpportunityId
+left join (select OpportunityId, DiscoveryAcceptedDate, sum(Case when Productline like 'Creator%' then (ARR_USD + OneTimeRevenue_USD) end) as CreatorARR_USD, 
+sum(Case when Productline like 'Vision%' then (ARR_USD + OneTimeRevenue_USD) end) as VisionARR_USD,
+sum(Case when Productline not like 'Creator%' and Productline not like 'Vision%' then (ARR_USD + OneTimeRevenue_USD) end) as PlatformARR_USD,
+from  `crowdriff-revops.bi_business.productline_opportunity_details`
+group by OpportunityId,DiscoveryAcceptedDate) as po on po.OpportunityId = RelatedOpportunityId 
+left join  `crowdriff-revops.bi_business.monthly_active_accounts` as aa on aa.AccountId = a.AccountId and aa.MonthEnd = case when o.stagename = 'Closed Won' and a.activitydate >= o.CloseDate then  greatest(a.CalendarMonthEnd, last_day(o.licensestartdate,Month)) else date_trunc(a.CalendarMonthEnd, Month)-1  end 
+left join  (select OpportunityId, CalendarDate,Sum(Case when Productline like 'Creator%' then (ARR_USD + OneTimeRevenue_USD) end) as CreatorARR_USD,Sum(Case when Productline like 'Vision%' then (ARR_USD + OneTimeRevenue_USD) end) as VisionARR_USD,
+sum(Case when Productline not like 'Creator%' and Productline not like 'Vision%' then (ARR_USD + OneTimeRevenue_USD) end) as PlatformARR_USD, from `crowdriff-revops.bi_business.productline_pipeline_daily` group by CalendarDate,OpportunityId) as pf on pf.OpportunityId = po.OpportunityId and pf.CalendarDate = greatest(date(po.DiscoveryAcceptedDate), "2023-08-01") 
+---- Only include emails actually sent, not previously dropped
+where  (Email_IsSent = 1 or `record` = 'Hubspot Form')------ FormId = '8fd591a0-5495-44fa-b797-f9ff7d35fa0e'
+), 
+
+tmp_events as (
+Select max(ActivityDate) OVER (PARTITION BY coalesce(accountid, contactid, LeadId), ------ removed as opps keep getting created, RelatedOpportunityId,
+EventSequence  
+        ORDER BY EventSequence, ActivityDate, CreatedTime_Trunc DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as LastEventDate, 
+max(IF (Activity like 'MQP%', CreatedTime_Trunc, null)) ----IGNORE NULLS)  
+       OVER (PARTITION BY coalesce(accountid, contactid, LeadId)----, --------RelatedOpportunityId------,EventSequence 
+        ORDER BY CreatedTime_Trunc, EventSequence -------ActivityDate, EventSequence, CreatedTimestamp DESC 
+        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        )  as PreviousMQPDate,
+min(IF (Activity like 'MQP%', CreatedTime_Trunc, null)) ----IGNORE NULLS)  
+       OVER (PARTITION BY coalesce(accountid, contactid, LeadId)----, --------RelatedOpportunityId------,EventSequence 
+        ORDER BY CreatedTime_Trunc, EventSequence  ROWS BETWEEN 1 FOLLOWING and UNBOUNDED FOLLOWING
+        )  as NextMQPDate,
+        CreatedTime_Trunc as CreatedTimestamp,
+        a.* EXCEPT (CreatedTimestamp),
+         
+        from tmp_activity_join  as a 
+      where ---ActivityDate > '2023-02-01' and ---and Account in ('Cannery Row Company','Destination Canada', 'Visit Oslo') and ------LHTask = 1 or
+    ((`CustomerType` in  ('Prospect','Past Customer','Customer') 
+    ---- removed as some requests not correctly assigned  
+    ---  and (EmployeeDivision not in ('Customer Success', 'Management') or EmployeeDivision is null)) 
+    )
+   or `EventSequence` between 70 and 110 ) and (`RelatedOpportunityTypeGroup` != 'Renewal'or `RelatedOpportunityTypeGroup` is null or Activity like '%MQP%'))
+------select * from  tmp_events    where AccountContactName = `EventSequence` <111 order by AccountContactName, ActivityDate, EventSequence
+
+Select 
+case when length(AccountContactId) = 8 then 'HSLead' else ActivityStage end as `ActivityStage`, 
+`AccountContactId`,
+`AccountContactName`, 
+RelatedOpportunityName,
+RelatedOpportunityId,
+`CustomerType`,
+`Record`,
+ `Activity`,
+`ActivityDate`,
+---Case when `EventSequence` <=100  then 
+Min(`LastEventDate` - 90) OVER (PARTITION BY  AccountContactName,  ------, RelatedOpportunityId,  
+`EventSequence` <=100   
+        ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC) ---end 
+        as `FirstActivityDate`,
+---Min(PreviousMQPDate + 91) OVER (PARTITION BY  AccountContactName, RelatedOpportunityId,  `EventSequence` <=100   
+       ---- ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC) ---end 
+ /*Case when Activity like 'MQP%' then PreviousMQPDate
+ when  (EventSequence between 18 and 90) and CreatedTimestamp > mf.RelatedCreatedTimestamp and CreatedTimestamp <=  Date_add(mf.RelatedCreatedTimestamp, INTERVAL 366 DAY) */
+ case when mf.RelatedActivity like 'MQP%' and (e.Eventsequence between 20 and 80  or (e.record = 'Hubspot Form' and mf.RelatedFormFillId = e.ActivityId) or (e.Record = "Hubspot Task" and mf.RelatedMQPTaskId = e.ActivityId)) and CreatedTimestamp <=  Date_add(mf.RelatedCreatedTimestamp, INTERVAL 366 DAY) then mf.RelatedCreatedTimestamp end as MQPCreditStartDate,
+ /*Case when Activity like 'MQP%' or ( (EventSequence between 18 and 90 ) and CreatedTimestamp <=  Date_add(mf.RelatedCreatedTimestamp, INTERVAL 366 DAY) )*/
+ case when mf.RelatedActivity like 'MQP%' and (e.Eventsequence between 20 and 80  or (e.record = 'Hubspot Form' and mf.RelatedFormFillId = e.ActivityId) or (e.Record = "Hubspot Task" and mf.RelatedMQPTaskId = e.ActivityId)) and CreatedTimestamp <=  Date_add(mf.RelatedCreatedTimestamp, INTERVAL 366 DAY)then Date_add(mf.RelatedCreatedTimestamp, INTERVAL 366 DAY) end  as `MQPCreditEndDate`,
+case when mf.RelatedActivity like 'MQP%' and (e.Eventsequence between 20 and 80  or (e.record = 'Hubspot Form' and mf.RelatedFormFillId = e.ActivityId) or (e.Record = "Hubspot Task" and mf.RelatedMQPTaskId = e.ActivityId)) and CreatedTimestamp <=  Date_add(mf.RelatedCreatedTimestamp, INTERVAL 366 DAY)then 1 end IsMQPEvent,
+-----Case when  (EventSequence between 18 and 90 ) and CreatedTimestamp <=  Date_add(PreviousMQPDate, INTERVAL 366 DAY)   or Activity like 'MQP%' then 1 end as IsMQPEvent,
+
+----Case when `EventSequence` <=100  then Min(`EventReportDate`) OVER (PARTITION BY  coalesce(accountid, contactid, LeadId), RelatedOpportunityId  
+-----        ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC) end as `FirstReportDate`,
+--------Case when `EventSequence` <=100  and ActivityDate >= `EventReportDate` then `EventReportDate` end as `EventReportStartDate`,
+RANK() OVER (PARTITION BY AccountContactName -------, RelatedOpportunityId  
+ORDER BY CreatedTimestamp, EventSequence) AS EventOrder, ------ActivityDate, EventSequence, CreatedTimestamp DESC) AS EventOrder, 
+
+Case when `EventSequence` <=100  and ActivityDate >= LastEventDate - 90 then RANK() OVER (PARTITION BY  AccountContactName, -----RelatedOpportunityId, 
+EventSequence <=100, ActivityDate >= LastEventDate - 90  
+        ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC) end AS ConvertedEventOrder, 
+Case when (Case when `EventSequence` <=100 and ActivityDate >= LastEventDate - 90 then RANK() OVER (PARTITION BY  AccountContactName, -----RelatedOpportunityId, 
+EventSequence, ActivityDate >= LastEventDate - 90  
+        ORDER BY EventSequence, ActivityDate, CreatedTimestamp DESC) end) = 1 then True else False end as IsFirstEvent,
+
+---Case when (Case when `EventSequence` <=100  then RANK() OVER (PARTITION BY  coalesce(accountid, contactid, LeadId), RelatedOpportunityId, EventSequence  
+----       ORDER BY EventSequence, ActivityDate DESC, CreatedTimestamp DESC) end) = 1 then True else False end as IsLastEvent,
+-----Case when (Case when `EventSequence` <=100  and ActivityDate >= `EventReportDate` - 90 then RANK() OVER (PARTITION BY  coalesce(accountid, contactid, LeadId), -------RelatedOpportunityId, EventSequence, ActivityDate >= EventReportDate - 90  
+------       ORDER BY EventSequence, ActivityDate ASC, CreatedTimestamp DESC) end) = 1 then True else False end as IsReportEvent,
+Case when RelatedOpportunityStageName = 'Closed Won' and ActivityDate <= RelatedOpportunityCloseDate and RelatedOpportunityTypeGroup in ('Addition', 'New') then RelatedOpportunityCloseDate end as RelatedClosedWonDate,  
+Case when RelatedOpportunityStageName like '%Closed%' and ActivityDate <= RelatedOpportunityCloseDate and RelatedOpportunityTypeGroup in ('Addition', 'New') then RelatedOpportunityCloseDate end as RelatedClosedDate,                   
+        
+Case when `EventSequence` <60  then min(Case when EventSequence in (60, 70) then ActivityDate end) OVER (PARTITION BY AccountContactName , RelatedOpportunityId  
+        ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC ROWS BETWEEN CURRENT ROW  and UNBOUNDED FOLLOWING) end as RelatedOppAcceptedDate,
+Case when `EventSequence` <50  then min(Case when EventSequence in (50, 60, 70) then ActivityDate end) OVER (PARTITION BY AccountContactName, RelatedOpportunityId  
+        ORDER BY ActivityDate, EventSequence, CreatedTimestamp  ROWS BETWEEN CURRENT ROW  and UNBOUNDED FOLLOWING) end as RelatedOppCreatedDate,
+Case when `EventSequence` <45  then min(Case when EventSequence in (45) then ActivityDate end) OVER (PARTITION BY AccountContactName, RelatedOpportunityId  
+        ORDER BY ActivityDate, EventSequence, CreatedTimestamp  ROWS BETWEEN CURRENT ROW and UNBOUNDED FOLLOWING) end as RelatedDemoCallDate,
+Case when `EventSequence` <40  then min(Case when EventSequence in (40,45) then ActivityDate end) OVER (PARTITION BY coalesce(accountid, contactid, LeadId), RelatedOpportunityId  
+        ORDER BY ActivityDate, EventSequence, CreatedTimestamp  ROWS BETWEEN CURRENT ROW and UNBOUNDED FOLLOWING) end as RelatedDemoCallBookedDate,
+Case when `EventSequence` <35  then min(Case when EventSequence in (35,40,45) then ActivityDate end) OVER (PARTITION BY AccountContactName, RelatedOpportunityId
+        ORDER BY ActivityDate, EventSequence, CreatedTimestamp  ROWS BETWEEN CURRENT ROW and UNBOUNDED FOLLOWING) end as RelatedDiscoCallDate,
+Case when `EventSequence` <30  then min(Case when EventSequence in (30,35,40,45) then ActivityDate end) OVER (PARTITION BY AccountContactName, RelatedOpportunityId
+        ORDER BY ActivityDate, EventSequence, CreatedTimestamp  ROWS BETWEEN CURRENT ROW and UNBOUNDED FOLLOWING) end as RelatedDiscoCallBookedDate,
+Case when `EventSequence` <25  then min(Case when EventSequence in (25,30,35,40,45) then ActivityDate end) OVER (PARTITION BY coalesce(accountid, contactid, LeadId), RelatedOpportunityId  
+        ORDER BY ActivityDate, EventSequence, CreatedTimestamp ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) end as RelatedQualCallDate,
+Case when `EventSequence` <20  then min(Case when EventSequence in (20,25,30,35,40,45) then ActivityDate end) OVER (PARTITION BY AccountContactName, RelatedOpportunityId  
+        ORDER BY ActivityDate, EventSequence, CreatedTimestamp ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) end as RelatedQualCallBookedDate,
+
+Case when `EventSequence` <80  then Nullif(GREATEST(Date_diff(max(Case when EventSequence in (80) then ActivityDate end) 
+        OVER (PARTITION BY AccountContactName, RelatedOpportunityId ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC  
+        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoClosedLost, 
+
+Case when `EventSequence` <70  then Nullif(GREATEST(Date_diff(max(Case when EventSequence in (70) then ActivityDate end) 
+        OVER (PARTITION BY AccountContactName, RelatedOpportunityId ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC 
+        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoCloseWon,  
+        
+Case when `EventSequence` <60  then Nullif(GREATEST(Date_diff(min(Case when EventSequence in (60, 70) then ActivityDate end) 
+        OVER (PARTITION BY AccountContactName, RelatedOpportunityId ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC 
+        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoOppAccepted,  
+        
+Case when `EventSequence` <50  then Nullif(GREATEST(Date_diff(min(Case when EventSequence in (50, 60, 70) then ActivityDate end) 
+        OVER (PARTITION BY AccountContactName, RelatedOpportunityId ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC
+        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoOppCreated,         
+
+Case when `EventSequence` <45  then Nullif(GREATEST(Date_diff(min(Case when EventSequence in (45) then ActivityDate end) 
+        OVER (PARTITION BY AccountContactName, RelatedOpportunityId ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC
+        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoDemoCall, 
+
+Case when `EventSequence` <40  then Nullif(GREATEST(Date_diff(min(Case when EventSequence in (40,45) then ActivityDate end) 
+        OVER (PARTITION BY AccountContactName, RelatedOpportunityId ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC
+        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoDemoCallBooked,  
+
+Case when `EventSequence` <35  then Nullif(GREATEST(Date_diff(min(Case when EventSequence in (35,40,450) then ActivityDate end) 
+        OVER (PARTITION BY AccountContactName, RelatedOpportunityId  ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC
+        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoDiscoCall,  
+
+Case when `EventSequence` <30  then Nullif(GREATEST(Date_diff(min(Case when EventSequence in (30,35,40,45) then ActivityDate end) 
+        OVER (PARTITION BY AccountContactName, RelatedOpportunityId  ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC
+        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoDiscoCallBooked,  
+        
+Case when `EventSequence` <25  then Nullif(GREATEST(Date_diff(min(Case when EventSequence in (25,30,35,40,45) then ActivityDate end) 
+        OVER (PARTITION BY AccountContactName, RelatedOpportunityId ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC
+        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoQualCall,         
+
+Case when `EventSequence` <20  then Nullif(GREATEST(Date_diff(min(Case when EventSequence in (20,25,30,35,40,45) then ActivityDate end) 
+        OVER (PARTITION BY AccountContactName, RelatedOpportunityId ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC
+        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoQualCallBooked, 
+       
+        `EventSequence`, 
+        
+        `RelatedOpportunityCloseDate`,
+         `RelatedOpportunityTypeGroup`,
+         `RelatedOpportunityStageName`,
+         `RelatedOpportunityARR_USD`,
+         `Connect`,
+        `NoConnect`,
+        `CallNoShow`,
+        `CallCompleted`,
+        `MovingForward`,
+        `NotMovingForward`,
+        `Touch`,
+        e.`CalendarMonthEnd`,
+        `Calendaryyyymmm`,
+        `FiscalQuarterEnd`,
+         Replace(`Fiscalyyyyq`,'_',' ') as `Fiscalyyyyq`,
+        `Account`,
+        `AccountId`,
+        `TaskId`,
+        `EventId`,
+        `FormId`,
+        `ContactName`,
+         coalesce(`ContactId`,`LeadId`,cast(`HubspotContactId` as STRING)) As ContactId,
+        `LeadId`,
+        `HubspotContactId`,
+         Case when Coalesce(`OpportunityLeadSource`,RelatedOppLeadSource) in ('Inbound','Advertisement','Webinar', 'Trade Show') then 'Inbound' else Coalesce(`OpportunityLeadSource`,RelatedOppLeadSource) end as `OpportunityLeadSource` ,
+         Case when `ContactLeadSource` in ('Inbound','Advertisement','Webinar', 'Trade Show') then 'Inbound' else `ContactLeadSource` end as `ContactLeadSource`,
+        `EmployeeName`,
+        `Pod`,
+        `EmployeeDivision`,
+        `EmployeeDepartment`,
+        `EmployeeCurrentStatus`,
+        `EmployeeMonthStatus`,
+        `CreatedById`,
+        `OwnerId`,
+        `OwnerPod`,
+        `SalesPod`,
+        `OwnerRole`,
+        `OwnerProfile`,
+        `AccountTier`,
+        Coalesce(r.`Region`, e.Region, 'Other') as `Region`,
+         Case when Coalesce(r.`ReportingRegion`, e.ReportRegion, 'Other') in ('NORTH AMERICA', 'EUROPE', 'OCEANIA') then coalesce(r.`Country`,e.`Country`, 'Other') else 'Other' end as Country,
+         Coalesce(r.`ReportingRegion`, e.ReportRegion, 'Other') as ReportRegion,
+        `Industry`,
+        `MainIndustry`,
+        `Vertical`,
+        `DestinationType`,
+        `IsTargetAccount`,
+        `TargetAccount`,
+        `AccountAcquisitionSource`,
+        `Reseller`,
+        `IsReseller`,
+        `IsStories`,
+        `CreatedTimestamp`,
+        `ActivityType`,
+        `ActivitySubType`,
+        `TaskType`,
+        `TaskSubType`,
+        `Type`,
+        `CallType`,
+        `CallResult`,
+        `Answered`,
+        `Subject`,
+        `TaskStatus`,
+        `ActivityId`,
+       `EmailId`,
+coalesce(RelatedFormCampaignName,CampaignName) as CampaignName,
+coalesce(RelatedFormCampaignType,e.CampaignType) as CampaignType,
+HS_CampaignId,
+Email_LastTouchDate,
+Email_SecondsOpen,
+Email_UrlsClickedCount,
+Email_OpenCount,
+Email_ClickCount,
+Email_IsClicked,
+Email_IsOpened,
+Email_IsDelivered,
+Email_IsSent,
+Email_IsNotDelivered,
+Email_IsFlaggedSpam,
+Email_IsSubscribeChange,
+page_url, 
+url, 
+coalesce(RelatedFormUTM_campaign,utm_campaign) as utm_campaign, 
+coalesce(RelatedFormUTM_source, utm_source) as utm_source,  
+coalesce(RelatedFormUTM_Content,utm_content) as utm_content,  
+coalesce(RelatedFormUTM_Medium, utm_medium) as utm_medium,  
+hsa_cam,  
+hsa_grp, 
+hsa_ad, 
+hsa_src, 
+hsa_net, 
+hsa_ver,
+ContactLeadCreatedDate,
+-----TO DO Add array aggregate limit 1
+Case when IsNewContact is true then "New Contact" end as NewContact,
+AccountCreatedDate,
+Case when IsNewAccount is true then "New Account" end as NewAccount,
+Case when DiscoveryAcceptedDate is not null then 'Accepted Pipeline' end as AcceptedOpp,
+hsCtaTracking,
+JobTitle as EmployeeRole,
+coalesce(Related_ProductLine,e.ProductLine) as ProductLine,
+e.LHTask,
+coalesce(RelatedMQPProductIntent,e.MQPProductIntent) as MQPProductIntent,
+coalesce(RelatedMQPBuyingIntent,e.MQPBuyingIntent) as MQPBuyingIntent,
+e.HSCampaign,
+e.MQPConversion,
+e.MQPConversionDate,
+e.SubmissionGuid,
+CalendarWeekStart,
+CalendarWeekEnd,
+CalendarWeeksFromCurrent,
+Case when coalesce(RelatedFormCampaignName,CampaignName) is not null and coalesce(RelatedFormCampaignName,CampaignName) != '' then 1 else IsTrackedCampaign end as IsTrackedCampaign,
+coalesce(RelatedFormCampaignQuarterEndDate,CampaignQuarterEndDate) as CampaignQuarterEndDate,
+coalesce(RelatedFormCampaignProductLine,CampaignProductLine,RelatedMQPProductIntent,e.MQPProductIntent) as CampaignProductLine,
+coalesce(RelatedFormCampaignStage,CampaignStage,RelatedMQPBuyingIntent,e.MQPBuyingIntent) as CampaignStage,
+RelatedFormFillId as MQPRelatedFormFillId,
+Prospect_UGC,
+Prospect_DAM,
+Prospect_Studio,
+Prospect_Creators,
+Active_Productline,
+Active_UGC,
+Active_DAM,
+Active_Studio,
+Active_Creators,
+Active_Customer,
+RelatedFormActivity,
+RelatedFormSubject,
+RelatedFormPageURL,
+RelatedMQPTaskId,
+`RelatedPlatformARR_USD` ,
+`RelatedCreatorARR_USD` ,
+`RelatedPipelinePlatformARR_USD` ,
+`RelatedPipelineCreatorARR_USD` ,
+`RelatedPipelineARR_USD` ,
+RelatedSAODate,
+date_diff(e.activitydate, mf.Relatedactivitydate, DAY) as DaysSinceMQP, 
+RelatedMQPContact,
+RelatedMQPContactId,
+MQPRejectionReason,
+MQPRejectionDate,
+Greatest(date_diff(e.activitydate, RelatedSAODate, DAY),0) as DaysSinceSAO,
+Prospect_Vision,
+Active_Vision,
+`RelatedVisionARR_USD` ,
+`RelatedPipelineVisionARR_USD` ,
+
+from tmp_events as e
+left join (select OpportunityId, DiscoveryAcceptedDate from `crowdriff-revops.bi_business.opportunity_details` where DiscoveryAcceptedDate is not null) as o 
+        on o.OpportunityId = RelatedOpportunityId and o.DiscoveryAcceptedDate <= `ActivityDate`
+left join `crowdriff-revops.bi_business.CountryRegionCodes` as r on e.Country = r.Country
+-------left join `crowdriff-revops.bi_business.DG_Qtr_CampaignBudget` as b on b.HSCampaignName = e.HSCampaign
+left join `crowdriff-revops.bi_business.employee_mapping` as m on e.`EmployeeName`  = coalesce(m.SalesforceName,m.PreferredName) and e.CalendarMonthEnd = m.CalendarMonthEnd
+---left join (select OpportunityId,ProductLine from `crowdriff-revops.bi_business.opportunity_details` ) as p   on p.OpportunityId = RelatedOpportunityId 
+left join (Select TaskId as RelatedMQPTaskId,
+coalesce(RelatedFormCampaignName, CampaignName) as RelatedFormCampaignName,
+coalesce(RelatedFormCampaignType, CampaignType) as RelatedFormCampaignType,
+coalesce(RelatedFormCampaignQuarterEndDate, CampaignQuarterEndDate) as RelatedFormCampaignQuarterEndDate,
+coalesce(RelatedFormCampaignProductLine, CampaignProductLine,MQPProductIntent) as RelatedFormCampaignProductLine,
+coalesce(RelatedFormCampaignStage, CampaignStage,MQPBuyingIntent) as RelatedFormCampaignStage,
+coalesce(RelatedFormUTM_Campaign, utm_campaign) as RelatedFormUTM_Campaign,
+RelatedFormUTM_Source,
+RelatedFormUTM_Content,
+RelatedFormUTM_Medium,
+RelatedFormActivity,
+RelatedFormSubject,
+RelatedFormPageURL,
+RelatedFormFillId,
+ MQPProductIntent as RelatedMQPProductIntent,
+ MQPBuyingIntent as RelatedMQPBuyingIntent,
+AccountContactName as RelatedAccountContactName,
+createdtimestamp as Relatedcreatedtimestamp,
+ActivityDate as RelatedActivityDate,
+Activity as RelatedActivity,
+ContactName as RelatedMQPContact,
+ContactId as RelatedMQPContactId,
+RelatedDivision
+ from `crowdriff-revops.bi_business.mqp_form_mapping` ) as mf 
+                on ((e.TaskId = mf.RelatedMQPTaskId or e.FormId = mf.RelatedFormFillId) and e.Record in ('Hubspot Task', 'Hubspot Form')) or
+                 (mf.RelatedAccountContactName  = e.AccountContactName and e.createdtimestamp >= -----e.PreviousMQPDate = 
+                 cast(mf.Relatedcreatedtimestamp as timestamp) and (e.EventSequence between 18 and 110 )and e.EmployeeDivision = case when e.EmployeeDivision = 'Customer Success' then mf.RelatedDivision else e.EmployeeDivision end)
+ -----from `crowdriff-revops.bi_business.mqp_form_mapping` ) as mf                 on (e.TaskId = mf.RelatedMQPTaskId or e.FormId = mf.RelatedFormFillId) and e.Record in ('Hubspot Task', 'Hubspot Form')
+/*where e.AccountContactName  in ('San Marcos Convention and Visitor Bureau', 'Destination Irvine' ,"Mt. Hood and Columbia River Gorge Regional Tourism Alliance",'Bloomington-Normal Area Convention & Visitors Bureau','Breckenridge Tourism Office', 'Cambridge Office For Tourism','Destination Madison','Discover Long Island')  and e.Eventsequence between 10 and 80 and e.Activity not like "Call%" and e.activity not like "Email%"*/
+Order by coalesce(accountid, contactid, LeadId), RelatedOpportunityId, ActivityDate,  EventSequence, CreatedTimestamp DESC;
