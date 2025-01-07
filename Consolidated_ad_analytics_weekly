@@ -1,0 +1,884 @@
+DELETE FROM  `crowdriff-revops`.`bi_business`.`consolidated_ad_analytics_weekly`  WHERE TRUE;
+
+INSERT   `crowdriff-revops`.`bi_business`.`consolidated_ad_analytics_weekly` 
+
+SELECT 
+CalendarMonthStart,
+CalendarMonthEnd,		
+FiscalQuarterStart,			
+FiscalQuarterEnd,	
+Calendaryyyymmm,	
+Fiscalyyyyq,
+Fiscalyyyy,
+CalendarMonthsFromCurrent,
+FiscalQuartersfromCurrent, 
+LastExtract,
+Application,
+Case when Application = 'Linkedin' then 'Publisher' 
+when Application = 'YouTube' and Breakdown = 'Total' then 'Publisher' 
+  when Application = 'Google' and Breakdown = 'Total' then 'Publisher' 
+  else Breakdown end as Breakdown,
+Case when Breakdown = 'Publisher' and lower(Level1) = 'instagram' then 'Facebook' 
+when Breakdown = 'Publisher' and lower(Level1) = 'facebook' then 'Facebook'
+else Level1 end as Level1,
+Level2,
+-----CalendarEndDate, 
+CampaignName, 
+-----AdsetName, 
+-----AdName, 
+
+-----Objective, 
+-----c.objective as Objective, 
+------BidType,
+-----CostType,
+-----CallToActionType,
+----AdType,
+
+ sum(Impressions) as Impressions, 
+sum(Reach) as Reach, 
+sum(Clicks) as Clicks,
+sum(UniqueClicks) as UniqueClicks,
+sum(InlineLinkClicks) as InlineLinkClicks,
+sum(UniqueInlineLinkClicks) as UniqueInlineLinkClicks,
+sum(OutboundClicks) as OutboundClicks,
+sum(InlinePostEngagement) as InlinePostEngagement,
+sum(Spend_CAD) as Spend_CAD,
+sum(Spend_USD) as Spend_USD,
+sum(ActionsComment) as ActionsComment, 
+sum(ActionsConversion) as ActionsConversion, 
+sum(ActionsCompleteRegistration) as ActionsCompleteRegistration, 
+sum(ActionsLandingPageView)as ActionsLandingPageViews, 
+sum(ActionsLead)as ActionsLead, 
+sum(ActionsLike) AS ActionsLike, 
+sum(ActionsLinkClick) as ActionsLinkClick, 
+sum(ActionsOutboundClick) as ActionsOutboundClick, 
+sum(ActionsOffsiteConversionCustom) as ActionsOffsiteConversionCustom, 
+sum(ActionsPageEngagement) as ActionsPageEngagement, 
+sum(ActionsPost) AS ActionsPost,  
+sum(ActionsPostEngagement) as ActionsPostEngagement, 
+sum(ActionsPostReaction) AS ActionsPostReaction,  
+sum(ActionsPostSave) AS ActionsPostSave,  
+sum(ActionsViewContent) as ActionsViewContent, 
+sum(ActionsVideoWatched_3sec) as ActionsVideoWatched_3sec, 
+sum(ActionsVideoWatched_30sec) as ActionsVideoWatched_30sec, 
+sum(ActionsVideoWatched_p25) as ActionsVideoWatched_p25, 
+sum(ActionsVideoWatched_p50) as ActionsVideoWatched_p50,
+sum(ActionsVideoWatched_p75) as ActionsVideoWatched_p75, 
+sum(ActionsVideoWatched_p100) as ActionsVideoWatched_p100,
+null as Sessions,
+null as PageViews,
+null as Duration, 
+null as Users, 
+null as NewUsers,
+null as SpendBudget_CAD,
+null as SpendBudget_USD,
+utm_campaign, 
+utm_source,  
+utm_content,  
+utm_medium, 
+Case when Application in ('Linkedin', 'Facebook') then "Paid Social" 
+when Application in ('Google') then "Paid Search" 
+when Application in ('YouTube') then "Paid Video" 
+else "Paid Other" end as ChannelGrouping, 
+hsa_cam,  
+hsa_grp, 
+
+hsa_src, 
+hsa_net, 
+hsa_ver,
+HSCampaignName,
+HSCampaignType,
+IsTrackedCampaign,
+CampaignQuarterEndDate,
+CampaignProductLine,
+CampaignStage,
+CalendarWeekStart,
+CalendarWeekEnd,
+CalendarWeeksFromCurrent
+
+-----regexp_extract(HSCampaignName, r'\[(.*?)\]') as HSCampaignPurpose 
+
+-----CalendarEndDate, 
+/*AdsetName, 
+AdName, 
+Objective, 
+CostType,
+CallToActionType,
+AdType*/
+
+---url_tags
+
+FROM `crowdriff-revops.bi_business.ad_analytics_weekly` as a
+where -----FiscalQuartersFromCurrent >=-6 and 
+(Application in ('Linkedin', 'Google', 'YouTube', 'Facebook')  or Breakdown in ('Publisher', 'Country')) and lower(utm_campaign) not like '%drift%' and  lower(utm_campaign) not like '%career%' and  lower(utm_campaign) not like '%recruitment%' and  lower(utm_campaign) not like '%meetings link%'
+Group by 
+CalendarMonthStart,
+CalendarMonthEnd,		
+FiscalQuarterStart,			
+FiscalQuarterEnd,	
+Calendaryyyymmm,	
+Fiscalyyyyq,
+Fiscalyyyy,
+CalendarMonthsFromCurrent,
+FiscalQuartersfromCurrent, 
+LastExtract,
+Application,
+Case when Application = 'Linkedin' then 'Publisher' 
+when Application = 'YouTube' and Breakdown = 'Total' then 'Publisher' 
+  when Application = 'Google' and Breakdown = 'Total' then 'Publisher' 
+  else Breakdown end,
+Case when Breakdown = 'Publisher' and lower(Level1) = 'instagram' then 'Facebook' 
+when Breakdown = 'Publisher' and lower(Level1) = 'facebook' then 'Facebook'
+else Level1 end ,
+Level2,
+
+CampaignName, 
+utm_campaign, 
+utm_source,  
+utm_content,  
+utm_medium, 
+Case when Application in ('Linkedin', 'Facebook') then "Paid Social" 
+when Application in ('Google') then "Paid Search" 
+when Application in ('YouTube') then "Paid Video" 
+else "Paid Other" end,
+hsa_cam,  
+hsa_grp, 
+
+hsa_src, 
+hsa_net, 
+hsa_ver,
+HSCampaignName,
+HSCampaignType,
+IsTrackedCampaign,
+CampaignQuarterEndDate,
+CampaignProductLine,
+CampaignStage,
+CalendarWeekStart,
+CalendarWeekEnd,
+CalendarWeeksFromCurrent
+
+
+
+Union all
+---- Add in GA data
+
+------
+
+
+Select 
+ 
+CalendarMonthStart,
+CalendarMonthEnd,		
+FiscalQuarterStart,			
+FiscalQuarterEnd,	
+Calendaryyyymmm,	
+Fiscalyyyyq,
+Fiscalyyyy,
+CalendarMonthsFromCurrent,
+FiscalQuartersfromCurrent, 
+Latest_GA_Day as LastExtract,
+'GA' as Application,
+'Country' as Breakdown,
+Country as Level1,
+ReportRegion as Level2,
+coalesce(HSCampaignName,GA_Campaign) as CampaignName, 
+null as Impressions, 
+null as Reach, 
+sum(Clicks) as Clicks,
+null as UniqueClicks,
+null as InlineLinkClicks,
+null as UniqueInlineLinkClicks,
+null as OutboundClicks,
+sum(UserEngagements) as InlinePostEngagement,
+null as Spend_CAD,
+null as Spend_USD,
+null as ActionsComment,
+sum(GeneratedLeads) as ActionsConversion, 
+null as ActionsCompleteRegistration, 
+sum(LandingPageViews) as ActionsLandingPageView, 
+null as ActionsLead, 
+null as ActionsLike, 
+sum(Clicks) as ActionsLinkClick, 
+null as ActionsOutboundClick, 
+null as ActionsOffsiteConversionCustom, 
+sum(EngagedSessions) as ActionsPageEngagement, 
+null as ActionsPost, 
+sum(UserEngagements) as ActionsPostEngagement, 
+null as ActionsPostReaction,
+null as ActionsPostSave,  
+null as ActionsViewContent, 
+null as ActionsVideoWatched_3sec, 
+null as ActionsVideoWatched_30sec,
+null as ActionsVideoWatched_p25,
+null as ActionsVideoWatched_p50,
+null as ActionsVideoWatched_p75,
+null as ActionsVideoWatched_p100,
+sum(Sessions) as Sessions,
+sum(PageViews) as PageViews,
+sum(Duration) as Duration,
+sum(Users) as Users, 
+sum(NewUsers) as NewUsers,
+null as SpendBudget_CAD,
+null as SpendBudget_USD,
+GA_Campaign as utm_campaign, 
+GA_Source as utm_source,
+ '#'as utm_content,  
+GA_Medium as utm_medium,  
+Case when GA_ChannelGrouping is null then 'Other' else GA_ChannelGrouping end  as ChannelGrouping,
+null as hsa_cam,  
+null as hsa_grp, 
+ '#'as hsa_src, 
+ '#'as hsa_net, 
+null as hsa_ver,
+HSCampaignName,
+HSCampaignType,
+IsTrackedCampaign,
+CampaignQuarterEndDate,
+CampaignProductLine,
+CampaignStage,
+CalendarWeekStart,
+CalendarWeekEnd,
+CalendarWeeksFromCurrent
+
+
+-----regexp_extract(HSCampaignName, r'\[(.*?)\]') as HSCampaignPurpose 
+
+ from  `crowdriff-revops`.`bi_business`.`weekly_ga_traffic` 
+ where lower(GA_Campaign) not like '%drift%' and  lower(GA_Campaign) not like '%career%' and  lower(GA_Campaign) not like '%recruitment%' and  lower(GA_Campaign) not like '%meetings link%'
+------where FiscalQuartersFromCurrent >=-6 -----and lower(GA_ChannelGrouping) like '%paid%'
+Group by 
+CalendarMonthStart,
+CalendarMonthEnd,		
+FiscalQuarterStart,			
+FiscalQuarterEnd,	
+Calendaryyyymmm,	
+Fiscalyyyyq,
+Fiscalyyyy,
+CalendarMonthsFromCurrent,
+FiscalQuartersfromCurrent, 
+Latest_GA_Day,
+Country,
+ReportRegion,
+GA_Campaign, 
+GA_Source,
+GA_Medium,  
+Case when GA_ChannelGrouping is null then 'Other' else GA_ChannelGrouping end ,
+HSCampaignName,
+HSCampaignType,
+IsTrackedCampaign,
+CampaignQuarterEndDate,
+CampaignProductLine,
+CampaignStage,
+CalendarWeekStart,
+CalendarWeekEnd,
+CalendarWeeksFromCurrent
+
+ 
+ --- add in summary by channel --- includes traffic channel tidy up
+UNION ALL
+Select 
+ 
+CalendarMonthStart,
+CalendarMonthEnd,		
+FiscalQuarterStart,			
+FiscalQuarterEnd,	
+Calendaryyyymmm,	
+Fiscalyyyyq,
+Fiscalyyyy,
+CalendarMonthsFromCurrent,
+FiscalQuartersfromCurrent, 
+Latest_GA_Day as LastExtract,
+'GA' as Application,
+Case when GA_ChannelGrouping like '%Paid%' then 'Paid'
+when GA_ChannelGrouping like '%Display%' then 'Paid'
+when GA_ChannelGrouping like '%Direct%' then 'Direct'
+when GA_ChannelGrouping like '%Organic%' then 'Organic'
+when GA_ChannelGrouping like '%Email%' then 'Email'
+when GA_ChannelGrouping like '%Affiliate%' then 'Referral'
+when GA_ChannelGrouping like '%Referral%' then 'Referral'
+else 'Other' end as breakdown,
+/*Case 
+when   GA_ChannelGrouping is not null then INITCAP(Replace(GA_ChannelGrouping,"_"," ")) ('direct', 'shopping_paid'------'Email', 'Organic Search','Organic Video', 'Organic Social','Paid Other','Paid Video', 'Paid Search', 'Paid Social', 'Referral', 'Sponsored', 'Direct')  then INITCAP(GA_ChannelGrouping)
+when (lower(GA_source) in ('direct', '(not set)' or  lower(GA_source) is null) lower(GA_source) in ('direct', '(not set)') then 'Direct'
+when  lower(GA_Medium) like 'organic%'   then 'Organic Search' 
+when INITCAP(GA_ChannelGrouping) in ( 'Affiliates') or lower(GA_Medium) like 'sponsor%' or  lower(GA_Source) like 'sponsor%'or lower(GA_Medium) like 'article%' or lower(GA_Source) like 'article%' or lower(GA_Medium) like 'skift%' or lower(GA_Source) like 'skift%' or  lower(GA_Source) like '%simpleview%' or  lower(GA_Medium) like '%simpleview%' or  lower(GA_Source) like '%partner%' or  lower(GA_Medium) like '%event%'  or  lower(GA_Source) like '%event%' then 'Sponsored'
+when lower(GA_source) in ('google', 'adword', 'adwords', 'ppc',  'cpc') then "Paid Search"
+when  INITCAP(GA_ChannelGrouping) in ('Display') or lower(GA_Medium) like 'paid%' or lower(GA_Source) like 'paid%' or lower(GA_Medium) in ('ppc',  'cpc')  then 'Paid Social' 
+when   lower(GA_Medium) like '%email%' or lower(GA_Source) like '%email%' or lower(GA_Source) like '%gmail%' or lower(GA_Source) like '%banner%' or lower(GA_Source) like '%blog%' or  lower(GA_Medium) like 'sigstr%' or   lower(GA_Medium) like '%gnature%'or lower(GA_Source) like 'sigstr%' or lower(GA_Source) like 'blog%' or lower(GA_Source) like '%the riff% 'then 'Email' 
+when  (lower(GA_Medium) like 'refer%' and ( (GA_Source) like '%crowdriff%'  or (GA_Source) like '%localhood%' or (GA_Source) like '%uberflip%')) or lower(GA_Source) like '%uberflip%' or lower(GA_Source) like '%webinar%' or lower(GA_Medium) like 'platform%'
+or lower(GA_Source) like '%website%'  or lower(GA_Medium) like '%website%' or lower(GA_Source) like '%ebook%' then 'Referral' 
+when   lower(GA_Medium) like 'refer%' or lower(GA_Source) like 'refer%' or lower(GA_Medium) like 'social%' or lower(GA_Medium) like 'drift%' or lower(GA_Source) like 'drift%' or lower(GA_Source) like 'sojern%' then 'Social' 
+else 'Other' End as Breakdown,*/
+/*
+Case 
+when  lower(GA_source) = 'urlumbrella.com' then 'Spam'
+when GA_ChannelGrouping in ('Social', 'Email', 'Organic Search',  'Paid Search', 'Paid Social', 'Referral', 'Sponsored', 'Direct')  then GA_ChannelGrouping
+when lower(GA_source) in ('direct', '(not set)') then 'Direct'
+when  lower(GA_Medium) like 'organic%'   then 'Organic Search' 
+when GA_ChannelGrouping in ( 'Affiliates') or lower(GA_Medium) like 'sponsor%' or  lower(GA_Source) like 'sponsor%'or lower(GA_Medium) like 'article%' or lower(GA_Source) like 'article%' or lower(GA_Medium) like 'skift%' or lower(GA_Source) like 'skift%' or  lower(GA_Source) like '%simpleview%' or  lower(GA_Medium) like '%simpleview%' or  lower(GA_Source) like '%partner%' or  lower(GA_Medium) like '%event%'  or  lower(GA_Source) like '%event%' then 'Sponsored'
+when lower(GA_source) in ('google', 'adword', 'adwords', 'ppc',  'cpc') then "Paid Search"
+when  GA_ChannelGrouping in ('Display') or lower(GA_Medium) like 'paid%' or lower(GA_Source) like 'paid%' or lower(GA_Medium) in ('ppc',  'cpc')  then 'Paid Social' 
+when   lower(GA_Medium) like '%email%' or lower(GA_Source) like '%email%' or lower(GA_Source) like '%gmail%' or lower(GA_Source) like '%banner%' or lower(GA_Source) like '%blog%' or  lower(GA_Medium) like 'sigstr%' or   lower(GA_Medium) like '%gnature%' or lower(GA_Source) like 'sigstr%' or lower(GA_Source) like 'blog%' or lower(GA_Source) like '%the riff% 'then 'Email' 
+when  (lower(GA_Medium) like 'refer%' and ( (GA_Source) like '%crowdriff%'  or (GA_Source) like '%localhood%' or (GA_Source) like '%uberflip%')) or lower(GA_Source) like '%uberflip%' or lower(GA_Source) like '%webinar%' 
+or lower(GA_Source) like '%website%'  or lower(GA_Medium) like '%website%' or lower(GA_Source) like '%ebook%' then 'Referral' 
+when   lower(GA_Medium) like 'refer%' or lower(GA_Source) like 'refer%' or lower(GA_Medium) like 'social%' or lower(GA_Medium) like 'drift%' or lower(GA_Source) like 'drift%' or lower(GA_Source) like 'sojern%' then 'Social' 
+else 'Other'
+end */ 
+Case when (GA_ChannelGrouping like '%Paid%' or GA_ChannelGrouping like '%Display%') then 
+    (case when lower(GA_Source) like '%google%' then 'Google'
+    when lower(GA_Source) like '%facebook%' then 'Facebook'
+    when lower(GA_Source) like  '%linkedin%' then 'Linkedin' 
+    when lower(GA_Source) like 'instagram' then 'Facebook'
+    when lower(GA_Source) like 'youtube' then 'YouTube' 
+    else 'Other' end)
+    else '#' end as Level1,
+/*Case when (INITCAP(GA_ChannelGrouping) in ('Paid Search', 'Paid Social', 'Display') or lower(GA_source) in ('google', 'adword', 'adwords', 'ppc',  'cpc') or lower(GA_Medium) like 'paid%' or lower(GA_Source) like 'paid%' or lower(GA_Medium) in ('ppc',  'cpc') )  and lower(GA_Source) in ('google', 'facebook' , 'linkedin', 'instagram') then InitCap(GA_Source) else 'Other' end as Level1,*/
+'#' as Level2,
+coalesce(HSCampaignName,GA_Campaign) as CampaignName, 
+null as Impressions, 
+null as Reach, 
+sum(Clicks) as Clicks,
+null as UniqueClicks,
+null as InlineLinkClicks,
+null as UniqueInlineLinkClicks,
+null as OutboundClicks,
+sum(UserEngagements) as InlinePostEngagement,
+null as Spend_CAD,
+null as Spend_USD,
+null as ActionsComment,
+sum(GeneratedLeads) as ActionsConversion, 
+null as ActionsCompleteRegistration, 
+sum(LandingPageViews) as ActionsLandingPageView, 
+null as ActionsLead, 
+null as ActionsLike, 
+sum(Clicks) as ActionsLinkClick, 
+null as ActionsOutboundClick, 
+null as ActionsOffsiteConversionCustom, 
+sum(EngagedSessions) as ActionsPageEngagement, 
+null as ActionsPost, 
+sum(UserEngagements) as ActionsPostEngagement, 
+null as ActionsPostReaction,
+null as ActionsPostSave,  
+null as ActionsViewContent, 
+null as ActionsVideoWatched_3sec, 
+null as ActionsVideoWatched_30sec,
+null as ActionsVideoWatched_p25,
+null as ActionsVideoWatched_p50,
+null as ActionsVideoWatched_p75,
+null as ActionsVideoWatched_p100,
+sum(Sessions) as Sessions,
+sum(PageViews) as PageViews,
+sum(Duration) as Duration,
+sum(Users) as Users, 
+sum(NewUsers) as NewUsers,
+null as SpendBudget_CAD,
+null as SpendBudget_USD,
+GA_Campaign as utm_campaign, 
+GA_Source as utm_source,
+ '#'as utm_content,  
+GA_Medium as utm_medium,  
+Case when GA_ChannelGrouping is null then 'Other' else GA_ChannelGrouping end as ChannelGrouping,
+null as hsa_cam,  
+null as hsa_grp, 
+ '#'as hsa_src, 
+ '#'as hsa_net, 
+null as hsa_ver,
+HSCampaignName,
+HSCampaignType,
+IsTrackedCampaign,
+CampaignQuarterEndDate,
+CampaignProductLine,
+CampaignStage,
+CalendarWeekStart,
+CalendarWeekEnd,
+CalendarWeeksFromCurrent
+
+
+-----regexp_extract(HSCampaignName, r'\[(.*?)\]') as HSCampaignPurpose 
+
+
+ from  `crowdriff-revops`.`bi_business`.`weekly_ga_traffic` 
+ where lower(GA_Campaign) not like '%drift%' and  lower(GA_Campaign) not like '%career%' and  lower(GA_Campaign) not like '%recruitment%' and  lower(GA_Campaign) not like '%meetings link%'
+------where FiscalQuartersFromCurrent >=-6 -----and lower(GA_ChannelGrouping) like '%paid%'
+Group by 
+CalendarMonthStart,
+CalendarMonthEnd,		
+FiscalQuarterStart,			
+FiscalQuarterEnd,	
+Calendaryyyymmm,	
+Fiscalyyyyq,
+Fiscalyyyy,
+CalendarMonthsFromCurrent,
+FiscalQuartersfromCurrent, 
+Latest_GA_Day,
+Case when GA_ChannelGrouping like '%Paid%' then 'Paid'
+when GA_ChannelGrouping like '%Display%' then 'Paid'
+when GA_ChannelGrouping like '%Direct%' then 'Direct'
+when GA_ChannelGrouping like '%Organic%' then 'Organic'
+when GA_ChannelGrouping like '%Email%' then 'Email'
+when GA_ChannelGrouping like '%Affiliate%' then 'Referral'
+when GA_ChannelGrouping like '%Referral%' then 'Referral'
+else 'Other' end,
+Case when (GA_ChannelGrouping like '%Paid%' or GA_ChannelGrouping like '%Display%') then 
+    (case when lower(GA_Source) like '%google%' then 'Google'
+    when lower(GA_Source) like '%facebook%' then 'Facebook'
+    when lower(GA_Source) like  '%linkedin%' then 'Linkedin' 
+    when lower(GA_Source) like 'instagram' then 'Facebook'
+    when lower(GA_Source) like 'youtube' then 'YouTube' 
+    else 'Other' end)
+    else '#' end,
+GA_Campaign, 
+GA_Source,
+GA_Medium,  
+Case when GA_ChannelGrouping is null then 'Other' else GA_ChannelGrouping end ,
+HSCampaignName,
+HSCampaignType,
+IsTrackedCampaign,
+CampaignQuarterEndDate,
+CampaignProductLine,
+CampaignStage,
+CalendarWeekStart,
+CalendarWeekEnd,
+CalendarWeeksFromCurrent
+
+
+
+
+Union ALL
+/*
+Select 
+CalendarMonthStart,
+CalendarMonthEnd,		
+FiscalQuarterStart,			
+FiscalQuarterEnd,	
+Calendaryyyymmm,	
+Fiscalyyyyq,
+Fiscalyyyy,
+CalendarMonthsFromCurrent,
+FiscalQuartersfromCurrent, 
+LatestDay as LastExtract,
+'Budget' as Application,
+'Month' as Breakdown,
+ '#'as Level1,
+ '#'as Level2,
+ '#'as CampaignName, 
+null as Impressions, 
+null as Reach, 
+null as Clicks,
+null as UniqueClicks,
+null as InlineLinkClicks,
+null as UniqueInlineLinkClicks,
+null as OutboundClicks,
+null as InlinePostEngagement,
+null as Spend_CAD,
+null as Spend_USD,
+null as ActionsComment,
+null as ActionsConversion, 
+null as ActionsCompleteRegistration, 
+null as ActionsLandingPageView, 
+null as ActionsLead, 
+null as ActionsLike, 
+null as ActionsLinkClick, 
+null as ActionsOutboundClick, 
+null as ActionsOffsiteConversionCustom, 
+null as ActionsPageEngagement, 
+null as ActionsPost, 
+null as ActionsPostEngagement, 
+null as ActionsPostReaction,
+null as ActionsPostSave,  
+null as ActionsViewContent, 
+null as ActionsVideoWatched_3sec, 
+null as ActionsVideoWatched_30sec,
+null as ActionsVideoWatched_p25,
+null as ActionsVideoWatched_p50,
+null as ActionsVideoWatched_p75,
+null as ActionsVideoWatched_p100,
+null as Sessions,
+null as PageViews,
+null as Duration, 
+null as Users, 
+null as NewUsers,
+Spend_Budget as SpendBudget_CAD,
+Spend_Budget/1.3 as SpendBudget_USD,
+ '#'as utm_campaign, 
+ '#'as utm_source,
+ '#'as utm_content,  
+ '#'as utm_medium,  
+ '#'as GA_ChannelGrouping,
+null as hsa_cam,  
+null as hsa_grp, 
+ '#'as hsa_src, 
+ '#'as hsa_net, 
+null as hsa_ver,
+-----CalendarEndDate, 
+-----AdsetName, 
+-----AdName, 
+-----Objective, 
+------CostType,
+------CallToActionType,
+------AdType
+'#' as HSCampaignName,
+'#' as HSCampaignType,
+null IsTrackedCampaign,
+null as CampaignQuarterEndDate,
+'#' as CampaignProductLine,
+'#' as  CampaignStage, 
+CalendarWeekStart,
+CalendarWeekEnd,
+CalendarWeeksFromCurrent
+-----regexp_extract(HSCampaignName, r'\[(.*?)\]') as HSCampaignPurpose 
+ from  `crowdriff-revops`.`bi_business`.`DGSpendBudget` as b
+ join `crowdriff-revops`.`bi_business`.`calendar_standard` as c on b.Month = c.CalendarDate
+ 
+
+ UNION ALL
+*/
+
+Select 
+CalendarMonthStart,
+CalendarMonthEnd,		
+FiscalQuarterStart,			
+c.FiscalQuarterEnd,	
+Calendaryyyymmm,	
+c.Fiscalyyyyq,
+Fiscalyyyy,
+CalendarMonthsFromCurrent,
+FiscalQuartersfromCurrent, 
+LatestDay as LastExtract,
+'Campaign Budget' as Application,
+'Week Budget' as Breakdown,
+ '#'as Level1,
+ '#'as Level2,
+HSCampaignName as CampaignName, 
+null as Impressions, 
+null as Reach, 
+null as Clicks,
+null as UniqueClicks,
+null as InlineLinkClicks,
+null as UniqueInlineLinkClicks,
+null as OutboundClicks,
+null as InlinePostEngagement,
+null as Spend_CAD,
+null as Spend_USD,
+null as ActionsComment,
+null as ActionsConversion, 
+null as ActionsCompleteRegistration, 
+null as ActionsLandingPageView, 
+null as ActionsLead, 
+null as ActionsLike, 
+null as ActionsLinkClick, 
+null as ActionsOutboundClick, 
+null as ActionsOffsiteConversionCustom, 
+null as ActionsPageEngagement, 
+null as ActionsPost, 
+null as ActionsPostEngagement, 
+null as ActionsPostReaction,
+null as ActionsPostSave,  
+null as ActionsViewContent, 
+null as ActionsVideoWatched_3sec, 
+null as ActionsVideoWatched_30sec,
+null as ActionsVideoWatched_p25,
+null as ActionsVideoWatched_p50,
+null as ActionsVideoWatched_p75,
+null as ActionsVideoWatched_p100,
+null as Sessions,
+null as PageViews,
+null as Duration, 
+null as Users, 
+null as NewUsers,
+Round(Budget_CAD/12,2) as SpendBudget_CAD,
+Round(Budget_USD/12,2) as SpendBudget_USD,
+ '#'as utm_campaign, 
+ '#'as utm_source,
+ '#'as utm_content,  
+ '#'as utm_medium,  
+ '#'as GA_ChannelGrouping,
+null as hsa_cam,  
+null as hsa_grp, 
+ '#'as hsa_src, 
+ '#'as hsa_net, 
+null as hsa_ver,
+-----CalendarEndDate, 
+-----AdsetName, 
+-----AdName, 
+-----Objective, 
+------CostType,
+------CallToActionType,
+------AdType
+HSCampaignName as HSCampaignName,
+CampaignType as HSCampaignType,
+1 as IsTrackedCampaign,
+b.FiscalQuarterEnd as CampaignQuarterEndDate,
+coalesce(b.ProductLine,'#') as CampaignProductLine,
+coalesce(b.Stage,'#') as  CampaignStage, 
+CalendarWeekStart,
+CalendarWeekEnd,
+CalendarWeeksFromCurrent
+-----regexp_extract(HSCampaignName, r'\[(.*?)\]') as HSCampaignPurpose 
+ from  `crowdriff-revops`.`bi_business`.`DG_Qtr_CampaignBudget` as b
+ join `crowdriff-revops`.`bi_business`.`calendar_standard` as c on b.FiscalQuarterEnd = c.FiscalQuarterEnd and IsCalendarWeekEnd is true
+ where lower(HSCampaignName) not like '%drift%' and  lower(HSCampaignName) not like '%career%' and  lower(HSCampaignName) not like '%recruitment%' and  lower(HSCampaignName) not like '%meetings link%'
+
+ UNION ALL
+ Select 
+CalendarMonthStart,
+CalendarMonthEnd,		
+FiscalQuarterStart,			
+c.FiscalQuarterEnd,	
+Calendaryyyymmm,	
+c.Fiscalyyyyq,
+Fiscalyyyy,
+CalendarMonthsFromCurrent,
+FiscalQuartersfromCurrent, 
+LatestDay as LastExtract,
+'Campaign Budget' as Application,
+'Month Budget' as Breakdown,
+ '#'as Level1,
+ '#'as Level2,
+HSCampaignName as CampaignName, 
+null as Impressions, 
+null as Reach, 
+null as Clicks,
+null as UniqueClicks,
+null as InlineLinkClicks,
+null as UniqueInlineLinkClicks,
+null as OutboundClicks,
+null as InlinePostEngagement,
+null as Spend_CAD,
+null as Spend_USD,
+null as ActionsComment,
+null as ActionsConversion, 
+null as ActionsCompleteRegistration, 
+null as ActionsLandingPageView, 
+null as ActionsLead, 
+null as ActionsLike, 
+null as ActionsLinkClick, 
+null as ActionsOutboundClick, 
+null as ActionsOffsiteConversionCustom, 
+null as ActionsPageEngagement, 
+null as ActionsPost, 
+null as ActionsPostEngagement, 
+null as ActionsPostReaction,
+null as ActionsPostSave,  
+null as ActionsViewContent, 
+null as ActionsVideoWatched_3sec, 
+null as ActionsVideoWatched_30sec,
+null as ActionsVideoWatched_p25,
+null as ActionsVideoWatched_p50,
+null as ActionsVideoWatched_p75,
+null as ActionsVideoWatched_p100,
+null as Sessions,
+null as PageViews,
+null as Duration, 
+null as Users, 
+null as NewUsers,
+Round(Budget_CAD/3,2) as SpendBudget_CAD,
+Round(Budget_USD/3,2) as SpendBudget_USD,
+ '#'as utm_campaign, 
+ '#'as utm_source,
+ '#'as utm_content,  
+ '#'as utm_medium,  
+ '#'as GA_ChannelGrouping,
+null as hsa_cam,  
+null as hsa_grp, 
+ '#'as hsa_src, 
+ '#'as hsa_net, 
+null as hsa_ver,
+-----CalendarEndDate, 
+-----AdsetName, 
+-----AdName, 
+-----Objective, 
+------CostType,
+------CallToActionType,
+------AdType
+HSCampaignName as HSCampaignName,
+CampaignType as HSCampaignType,
+1 as IsTrackedCampaign,
+b.FiscalQuarterEnd as CampaignQuarterEndDate,
+coalesce(b.ProductLine,'#') as CampaignProductLine,
+coalesce(b.Stage,'#') as  CampaignStage, 
+cast(null as date) as CalendarWeekStart,
+cast(null as date) as CalendarWeekEnd,
+null as CalendarWeeksFromCurrent
+
+ from  `crowdriff-revops`.`bi_business`.`DG_Qtr_CampaignBudget` as b
+  join `crowdriff-revops`.`bi_business`.`calendar_standard` as c on b.FiscalQuarterEnd = c.FiscalQuarterEnd and IsCalendarMonthEnd is true
+  where lower(HSCampaignName) not like '%drift%' and  lower(HSCampaignName) not like '%career%' and  lower(HSCampaignName) not like '%recruitment%' and  lower(HSCampaignName) not like '%meetings link%'
+ 
+ UNION ALL
+
+ Select 
+CalendarMonthStart,
+CalendarMonthEnd,		
+FiscalQuarterStart,			
+c.FiscalQuarterEnd,	
+Calendaryyyymmm,	
+c.Fiscalyyyyq,
+Fiscalyyyy,
+CalendarMonthsFromCurrent,
+FiscalQuartersfromCurrent, 
+LatestDay as LastExtract,
+'Campaign Budget' as Application,
+'FYQtr Budget' as Breakdown,
+ '#'as Level1,
+ '#'as Level2,
+HSCampaignName as CampaignName, 
+null as Impressions, 
+null as Reach, 
+null as Clicks,
+null as UniqueClicks,
+null as InlineLinkClicks,
+null as UniqueInlineLinkClicks,
+null as OutboundClicks,
+null as InlinePostEngagement,
+null as Spend_CAD,
+null as Spend_USD,
+null as ActionsComment,
+null as ActionsConversion, 
+null as ActionsCompleteRegistration, 
+null as ActionsLandingPageView, 
+null as ActionsLead, 
+null as ActionsLike, 
+null as ActionsLinkClick, 
+null as ActionsOutboundClick, 
+null as ActionsOffsiteConversionCustom, 
+null as ActionsPageEngagement, 
+null as ActionsPost, 
+null as ActionsPostEngagement, 
+null as ActionsPostReaction,
+null as ActionsPostSave,  
+null as ActionsViewContent, 
+null as ActionsVideoWatched_3sec, 
+null as ActionsVideoWatched_30sec,
+null as ActionsVideoWatched_p25,
+null as ActionsVideoWatched_p50,
+null as ActionsVideoWatched_p75,
+null as ActionsVideoWatched_p100,
+null as Sessions,
+null as PageViews,
+null as Duration, 
+null as Users, 
+null as NewUsers,
+Round(Budget_CAD,2) as SpendBudget_CAD,
+Round(Budget_USD,2) as SpendBudget_USD,
+ '#'as utm_campaign, 
+ '#'as utm_source,
+ '#'as utm_content,  
+ '#'as utm_medium,  
+ '#'as GA_ChannelGrouping,
+null as hsa_cam,  
+null as hsa_grp, 
+ '#'as hsa_src, 
+ '#'as hsa_net, 
+null as hsa_ver,
+-----CalendarEndDate, 
+-----AdsetName, 
+-----AdName, 
+-----Objective, 
+------CostType,
+------CallToActionType,
+------AdType
+HSCampaignName as HSCampaignName,
+CampaignType as HSCampaignType,
+1 as IsTrackedCampaign,
+b.FiscalQuarterEnd as CampaignQuarterEndDate,
+coalesce(b.ProductLine,'#') as CampaignProductLine,
+coalesce(b.Stage,'#') as  CampaignStage, 
+cast(null as date) as CalendarWeekStart,
+cast(null as date) as CalendarWeekEnd,
+null as CalendarWeeksFromCurrent
+-----regexp_extract(HSCampaignName, r'\[(.*?)\]') as HSCampaignPurpose 
+ from  `crowdriff-revops`.`bi_business`.`DG_Qtr_CampaignBudget` as b
+ join `crowdriff-revops`.`bi_business`.`calendar_standard` as c on b.FiscalQuarterEnd = c.CalendarDate
+ where lower(HSCampaignName) not like '%drift%' and  lower(HSCampaignName) not like '%career%' and  lower(HSCampaignName) not like '%recruitment%' and  lower(HSCampaignName) not like '%meetings link%'
+
+  UNION ALL
+ 
+ Select
+CalendarMonthStart,
+CalendarMonthEnd,		
+FiscalQuarterStart,			
+c.FiscalQuarterEnd,	
+Calendaryyyymmm,	
+c.Fiscalyyyyq,
+Fiscalyyyy,
+CalendarMonthsFromCurrent,
+FiscalQuartersfromCurrent, 
+LatestDay as LastExtract,
+'Campaign Budget' as Application,
+'Total Budget' as Breakdown,
+ '#'as Level1,
+ '#'as Level2,
+HSCampaignName as CampaignName, 
+null as Impressions, 
+null as Reach, 
+null as Clicks,
+null as UniqueClicks,
+null as InlineLinkClicks,
+null as UniqueInlineLinkClicks,
+null as OutboundClicks,
+null as InlinePostEngagement,
+null as Spend_CAD,
+null as Spend_USD,
+null as ActionsComment,
+null as ActionsConversion, 
+null as ActionsCompleteRegistration, 
+null as ActionsLandingPageView, 
+null as ActionsLead, 
+null as ActionsLike, 
+null as ActionsLinkClick, 
+null as ActionsOutboundClick, 
+null as ActionsOffsiteConversionCustom, 
+null as ActionsPageEngagement, 
+null as ActionsPost, 
+null as ActionsPostEngagement, 
+null as ActionsPostReaction,
+null as ActionsPostSave,  
+null as ActionsViewContent, 
+null as ActionsVideoWatched_3sec, 
+null as ActionsVideoWatched_30sec,
+null as ActionsVideoWatched_p25,
+null as ActionsVideoWatched_p50,
+null as ActionsVideoWatched_p75,
+null as ActionsVideoWatched_p100,
+null as Sessions,
+null as PageViews,
+null as Duration, 
+null as Users, 
+null as NewUsers,
+Round(sum(Budget_CAD) over (PARTITION BY HSCampaignName ORDER BY b.FiscalQuarterEnd ASC
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),2) AS  SpendBudget_CAD,
+Round((sum(Budget_USD) over (PARTITION BY HSCampaignName ORDER BY b.FiscalQuarterEnd ASC
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)),2) as SpendBudget_USD,
+ '#'as utm_campaign, 
+ '#'as utm_source,
+ '#'as utm_content,  
+ '#'as utm_medium,  
+ '#'as GA_ChannelGrouping,
+null as hsa_cam,  
+null as hsa_grp, 
+ '#'as hsa_src, 
+ '#'as hsa_net, 
+null as hsa_ver,
+-----CalendarEndDate, 
+-----AdsetName, 
+-----AdName, 
+-----Objective, 
+------CostType,
+------CallToActionType,
+------AdType
+HSCampaignName as HSCampaignName,
+CampaignType as HSCampaignType,
+1 as IsTrackedCampaign,
+b.FiscalQuarterEnd as CampaignQuarterEndDate,
+coalesce(b.ProductLine,'#') as CampaignProductLine,
+coalesce(b.Stage,'#') as  CampaignStage, 
+cast(null as date) as CalendarWeekStart,
+cast(null as date) as CalendarWeekEnd,
+null as CalendarWeeksFromCurrent
+-----regexp_extract(HSCampaignName, r'\[(.*?)\]') as HSCampaignPurpose 
+
+ from  `crowdriff-revops`.`bi_business`.`DG_Qtr_CampaignBudget` as b
+join `crowdriff-revops`.`bi_business`.`calendar_standard` as c on b.FiscalQuarterEnd = c.CalendarDate
+where lower(HSCampaignName) not like '%drift%' and  lower(HSCampaignName) not like '%career%' and  lower(HSCampaignName) not like '%recruitment%' and  lower(HSCampaignName) not like '%meetings link%'
+;
