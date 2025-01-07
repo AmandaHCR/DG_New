@@ -1,0 +1,776 @@
+DELETE FROM  `crowdriff-revops`.`bi_business`.`activity_monthly_SAP_product1`  WHERE TRUE;
+
+INSERT   `crowdriff-revops`.`bi_business`.`activity_monthly_SAP_product1` 
+------analytics is weekly (previously monthly) only
+Select 
+c.CalendarMonthStart,
+c.CalendarMonthEnd,
+c.Calendaryyyymmm,
+c.CalendarMonthsFromCurrent,
+c.FiscalQuarterStart,
+c.FiscalQuarterEnd,
+Replace(c.Fiscalyyyyq,'_',' ') as Fiscalyyyyq,
+c.FiscalQuartersfromCurrent, 
+c.Fiscalyyyy,
+-------least(a.LastExtract,c.LatestDay) as LatestDay, ----- check if correct date
+c.LatestDay,
+'Marketing' as ActivityStage,
+Application as Record,
+Breakdown as Activity,
+
+0 as EventOrder,
+
+'#'as AccountContactId,
+'#'as AccountContactName,
+'#'as RelatedOpportunityName,
+'#'as RelatedOpportunityId,
+'#'as CustomerType,
+
+c.CalendarWeekEnd as ActivityDate,
+null as FirstActivityDate,
+0 as ConvertedEventOrder,
+False as IsFirstEvent,
+null as RelatedClosedWonDate,
+null as RelatedClosedDate,
+null as RelatedOppAcceptedDate,
+null as RelatedOppCreatedDate,
+null as RelatedDemoCallDate,
+null as RelatedDemoCallBookedDate,
+null as RelatedDiscoCallDate,
+null as RelatedDiscoCallBookedDate,
+null as RelatedQualCallDate,
+null as RelatedQualCallBookedDate,
+0 as EventSequence,
+null as RelatedOpportunityCloseDate,
+'#' as RelatedOpportunityTypeGroup,
+'#' as RelatedOpportunityStageName,
+null as RelatedOpportunityARR_USD,
+null as Connect,
+null as Touch,
+'#' as FormId,
+'#' as ContactName,
+'#' as ContactId,
+'#' as HubspotContactId,
+'#'as OpportunityLeadSource,
+'#'as ContactLeadSource,
+'#'as EmployeeName,
+'#'as EmployeeDivision,
+'#'as EmployeeDepartment,
+'#'as AccountTier,
+Case when Breakdown = 'Country' then Level1 else '#' end as Country,
+Case when Breakdown = 'Country' then Level2 else '#' end as ReportRegion,
+'#'as MainIndustry,
+'#'as Vertical,
+'#'as AccountAcquisitionSource,
+'#'as Reseller,
+'#'as CreatedTimestamp,
+'#'as  ActivityType,
+Replace(coalesce(b.CampaignType, a.HSCampaignType, '#'),"HS_","HS ") as  ActivitySubType,
+'#'as Subject,
+'#'as TaskStatus,
+null as Email_LastTouchDate,
+null as Email_SecondsOpen,
+null as Email_UrlsClickedCount,
+null as Email_OpenCount,
+null as Email_ClickCount,
+null as Email_IsClicked,
+null as Email_IsOpened,
+null as Email_IsDelivered,
+null as Email_IsSent,
+null as ContactLeadCreatedDate,
+'#'as NewContact,
+null as AccountCreatedDate,
+'#' as NewAccount,
+'#' as AcceptedOpp,
+
+
+coalesce(b.HSCampaignName, b2.HSCampaignName, a.HSCampaignName,CampaignName, '#') as CampaignName, 
+Replace(coalesce(b.CampaignType, a.HSCampaignType, '#'),"HS_","HS ") as CampaignType,
+'#'as HS_CampaignId,
+
+'#'as page_url,
+'#'as url,
+
+coalesce(utm_campaign, '#') as utm_campaign, 
+coalesce(case when utm_source = '' then '#' else utm_source end ,'#') as utm_source,
+coalesce(case when utm_content = '' then '#' else utm_content end,'#') as utm_content,
+coalesce(case when utm_medium = '' then '#' else utm_medium end, '#') as utm_medium, 
+
+coalesce(cast(hsa_cam as STRING) ,'#') as hsa_cam,
+coalesce(cast(hsa_grp as STRING) ,'#')  as hsa_grp,
+'#'as hsa_ad,
+coalesce(case when hsa_src = '' then '#' else hsa_src end , '#') as hsa_src, 
+coalesce(case when hsa_net = '' then '#' else hsa_net end , '#') as hsa_net, 
+coalesce(cast(hsa_ver as STRING) ,'#')  as hsa_ver,
+
+/*coalesce(Case when ChannelGrouping like 'Paid%' or ChannelGrouping like 'Display%' then 'Paid'
+        when ChannelGrouping like 'Organic%' then 'Organic'
+        else ChannelGrouping end, '#') */
+coalesce(ChannelGrouping , '#')       as ChannelGrouping, 
+coalesce(Case when Breakdown = 'Publisher' then Application 
+when Application = 'GA' and Breakdown like 'Paid%' then
+ (case when Level1 = 'Instagram' then 'Facebook' 
+    when Level1 in ('Facebook', 'Linkedin', 'Google', 'YouTube') then Level1 else 'Other' end) ---- Youtube
+end,'#')  as Publisher,
+Impressions, 
+Reach, 
+Clicks,
+UniqueClicks,
+InlineLinkClicks,
+UniqueInlineLinkClicks,
+OutboundClicks,
+InlinePostEngagement,
+Spend_CAD,
+Spend_USD,
+ActionsComment, 
+ActionsConversion, 
+ActionsCompleteRegistration, 
+ActionsLandingPageView, 
+ActionsLead, 
+ActionsLike, 
+ActionsLinkClick, 
+ActionsOutboundClick, 
+ActionsOffsiteConversionCustom, 
+ActionsPageEngagement, 
+ActionsPost,  
+ActionsPostEngagement, 
+ActionsPostReaction,  
+ActionsPostSave,  
+ActionsViewContent, 
+ActionsVideoWatched_3sec, 
+ActionsVideoWatched_30sec, 
+ActionsVideoWatched_p25, 
+ActionsVideoWatched_p50,
+ActionsVideoWatched_p75, 
+ActionsVideoWatched_p100,
+Sessions,
+PageViews,
+Duration, 
+Users, 
+NewUsers,
+SpendBudget_CAD,
+SpendBudget_USD,
+coalesce(b.HSCampaignName, b2.HSCampaignName,a.HSCampaignName, '#') as HSCampaignName, 
+Replace(coalesce(b.CampaignType, a.HSCampaignType, '#'),"HS_","HS ") as HSCampaignType, 
+null as DaystoClosedLost,
+null as DaystoCloseWon, 
+null as DaystoDemoCallBooked, 
+null as DaystoDiscoCallBooked, 
+null as DaystoOppAccepted, 
+null as DaystoOppCreated, 
+null as DaystoQualCallBooked,
+null as `NoConnect` ,
+null as `CallNoShow` ,
+null as `CallCompleted` ,
+null as `MovingForward` ,
+null as `NotMovingForward` ,
+'#' as EmployeeRole,
+'#' as ProductLine,
+null as LHTask,
+
+coalesce(b.ProductLine,b2.productline) as ProductIntent,
+UPPER(coalesce(b.Stage,b2.Stage)) as BuyingIntent,
+Case when coalesce(b.HSCampaignName, b2.HSCampaignName) is not null and coalesce(b.HSCampaignName, b2.HSCampaignName) != '' then 1 end as IsTrackedCampaign,
+b.FiscalQuarterEnd as CampaignQuarterEndDate,
+coalesce(b.ProductLine,b2.productline,'UnMapped') as CampaignProductLine,
+UPPER(coalesce(b.Stage,b2.Stage)) as CampaignStage,
+null as `MQPCreditStartDate`,
+null as `MQPCreditEndDate`,
+null as `IsMQPEvent`,
+c.CalendarWeekStart,
+c.CalendarWeekEnd,
+c.CalendarWeeksFromCurrent,
+ '#' as ActivityId,
+null as DaysSinceMQP,
+null as DaystoDemoCall, 
+null as DaystoDiscoCall,  
+null as DaystoQualCall,
+ '#' as Prospect_UGC,
+ '#' as Prospect_DAM,
+ '#' as Prospect_Studio,
+ '#' as Prospect_Creators,
+ '#' as Active_Productline,
+ '#' as Active_UGC,
+ '#' as Active_DAM,
+ '#' as Active_Studio,
+ '#' as Active_Creators,
+ '#' as Active_Customer,
+  '#' as RelatedFormActivity,
+ '#' as RelatedFormSubject,
+ '#' as RelatedFormPageURL,
+ '#' as RelatedMQPTaskId,
+ null as  `RelatedPlatformARR_USD` ,
+null as `RelatedCreatorARR_USD` ,
+null as RelatedMQPWeekEnd,
+null as RelatedMQPMonthEnd,
+null as RelatedMQPQuarterEnd,
+null as `RelatedPipelinePlatformARR_USD` ,
+null as `RelatedPipelineCreatorARR_USD` ,
+null as RelatedSAODate,
+null as MQPRelatedToTask,
+  null as LatestMQPTask,
+ '#' as RelatedMQPContact,
+  '#' as RelatedMQPContactId,
+'#' as MQPRejectionReason,
+Cast(null as date) as MQPRejectionDate,
+cast(null as date) as RelatedMQPDate,
+null as DaysSinceSAO,
+ '#' as Prospect_Vision,
+  '#' as Active_Vision,
+  null as `RelatedVisionARR_USD` ,
+  null as `RelatedPipelineVisionARR_USD` ,
+
+ ----coalesce(HSCampaignPurpose, '#') as  HSCampaignPurpose
+from `crowdriff-revops`.`bi_business`.`consolidated_ad_analytics_weekly` as a  
+join `crowdriff-revops.bi_business.calendar_adjusted` as c  on case 
+when Breakdown in ('Total Budget', 'FYQtr Budget' ) then a.FiscalQuarterEnd = c.FiscalQuarterEnd and c.CalendarDate = least(c.FiscalQuarterEnd,c.LatestDay) 
+when Breakdown in ('Month Budget' ) then a.CalendarMonthEnd = c.CalendarDate
+when a.CalendarMonthEnd between a.CalendarWeekStart and a.CalendarWeekEnd then c.CalendarDate = a.CalendarWeekStart 
+when  c.CalendarDate = a.CalendarWeekEnd and  a.CalendarMonthEnd = c.CalendarMonthEnd then c.CalendarDate = a.CalendarWeekEnd end 
+
+  left join (select distinct * from `crowdriff-revops.bi_business.DG_Qtr_CampaignBudget` where FiscalQuarterEnd is not null) as b on b.HSCampaignName = a.HSCampaignName   and b.FiscalQuarterEnd = a.FiscalQuarterEnd 
+  left join (select distinct * from `crowdriff-revops.bi_business.DG_Qtr_CampaignBudget` where FiscalQuarterEnd is null and coalesce(Budget_CAD,0) = 0) as b2 on b2.HSCampaignName = a.HSCampaignName and b.FiscalQuarterEnd is null
+-----join `crowdriff-revops.bi_business.calendar_standard` as c  on c.CalendarDate = CalendarMonthEnd
+where  c.FiscalQuartersfromCurrent between -9 and 0 --------c.CalendarMonthsFromCurrent  between -24 and 0 
+------and coalesce(a.HSCampaignName,utm_campaign) like '%see2'
+
+UNION ALL
+------activity is activity date
+------Select * from (
+SELECT 
+c.CalendarMonthStart, 
+a.CalendarMonthEnd,
+a.Calendaryyyymmm,
+c.CalendarMonthsFromCurrent,
+c.FiscalQuarterStart,
+a.FiscalQuarterEnd,
+Replace(a.`Fiscalyyyyq`,'_',' ') as Fiscalyyyyq,
+c.FiscalQuartersfromCurrent,
+
+c.Fiscalyyyy,
+c.LatestDay,
+ActivityStage,
+Record,
+Activity,
+EventOrder,
+
+AccountContactId,
+AccountContactName,
+coalesce(RelatedOpportunityName, '#')as RelatedOpportunityName,
+coalesce(RelatedOpportunityId ,'#')as RelatedOpportunityId,
+CustomerType,
+
+ActivityDate,
+FirstActivityDate,
+coalesce(ConvertedEventOrder,0 ) as ConvertedEventOrder,
+coalesce(IsFirstEvent,FALSE ) as IsFirstEvent,
+RelatedClosedWonDate,
+RelatedClosedDate,
+RelatedOppAcceptedDate,
+RelatedOppCreatedDate,
+RelatedDemoCallDate,
+RelatedDemoCallBookedDate,
+RelatedDiscoCallDate,
+RelatedDiscoCallBookedDate,
+RelatedQualCallDate,
+RelatedQualCallBookedDate,
+coalesce(EventSequence,0 ) as EventSequence,
+RelatedOpportunityCloseDate,
+coalesce(RelatedOpportunityTypeGroup,'#') as RelatedOpportunityTypeGroup,
+coalesce(RelatedOpportunityStageName,'#') as RelatedOpportunityStageName,
+RelatedOpportunityARR_USD,
+Connect,
+Touch,
+
+coalesce(FormId, MQPRelatedFormFillId, '#')as FormId,
+coalesce(ContactName,'#') as ContactName,
+coalesce(ContactId,'#') as ContactId,
+coalesce(Cast (HubspotContactId as STRING),'#') as HubspotContactId,
+coalesce(OpportunityLeadSource,'#') as OpportunityLeadSource,
+coalesce(ContactLeadSource,'#') as ContactLeadSource,
+coalesce(EmployeeName,'#') as EmployeeName,
+coalesce(EmployeeDivision, '#')as EmployeeDivision,
+coalesce(EmployeeDepartment, '#')as EmployeeDepartment,
+coalesce(AccountTier, '#')as AccountTier,
+coalesce(Country, '#')as Country,
+coalesce(ReportRegion , '#')as ReportRegion,
+coalesce(case when MainIndustry = '' then '#' 
+when MainIndustry = 'Hotel' or MainIndustry = 'Resort' then 'Hotels & Resorts' else MainIndustry end, '#')as MainIndustry,
+coalesce(Vertical, '#')as Vertical,
+Coalesce(AccountAcquisitionSource, '#')as AccountAcquisitionSource ,
+coalesce(Reseller, '#')as Reseller,
+coalesce(Cast (CreatedTimestamp as String), '#')as CreatedTimestamp,
+Coalesce(ActivityType, '#')as ActivityType,
+Replace(Case when Activity = "MQP(Event)" then "HS Event Lead"
+  -----when Activity = "MQP(Form)" then 
+  when RelatedFormActivity is not null then RelatedFormActivity
+    when CampaignType is not null then CampaignType
+     when ActivitySubType like '%Content%' then 'HS Content Download'
+    when ActivitySubType like '%Inbound%' and lower(utm_campaign) like '%demo%'  then 'HS Demo Request'
+    when ActivitySubType like '%Inbound%' then  'HS Webinar Registration'
+    when CampaignName is not null then "HS Other" 
+  else '#' end,"HS_","HS ")  as ActivitySubType,
+Coalesce(Subject, '#')as Subject,
+coalesce(TaskStatus,'#') as TaskStatus,
+Email_LastTouchDate,
+Email_SecondsOpen,
+Email_UrlsClickedCount,
+Email_OpenCount,
+Email_ClickCount,
+Email_IsClicked,
+Email_IsOpened,
+Email_IsDelivered,
+Email_IsSent,
+ContactLeadCreatedDate,
+coalesce(NewContact,'#') as NewContact,
+AccountCreatedDate,
+coalesce(NewAccount,'#') as NewAccount ,
+coalesce(AcceptedOpp,'#') as AcceptedOpp,
+
+coalesce(CampaignName,'#') as CampaignName,
+Replace(Case when Activity = "MQP(Event)" then "Event Lead"
+  -----when Activity = "MQP(Form)" then 
+  when RelatedFormActivity is not null then RelatedFormActivity
+    when CampaignType is not null then CampaignType
+     when ActivitySubType like '%Content%' then 'HS Content Download'
+    when ActivitySubType like '%Inbound%' and lower(utm_campaign) like '%demo%'  then 'HS Demo Request'
+    when ActivitySubType like '%Inbound%' then  'HS Webinar Registration'
+    when CampaignName is not null then "HS Other" 
+  else '#' end,"HS_","HS ") as CampaignType,
+coalesce(cast(HS_CampaignId as STRING),'#') as HS_CampaignId,
+
+coalesce(page_url,'#') as page_url,
+coalesce(url,'#') as url,
+coalesce(utm_campaign,'#') as utm_campaign,
+coalesce(utm_source,'#') as utm_source,
+coalesce(utm_content,'#') as utm_content,
+coalesce(utm_medium,'#') as utm_medium,
+coalesce(cast(hsa_cam as STRING) ,'#') as hsa_cam,
+coalesce(cast(hsa_grp as STRING) ,'#')  as hsa_grp,
+'#'as hsa_ad,
+coalesce(hsa_src, '#') as hsa_src, 
+coalesce(hsa_net, '#') as hsa_net, 
+coalesce(cast(hsa_ver as STRING),'#')as hsa_ver,  
+
+Case when record like 'Hubspot%' or IsMQPEvent = 1 then 
+  
+  -- Direct: Source exactly matches "(direct)" AND Medium is one of ("(not set)", "(none)")
+ case when (
+      lower(utm_source) is null
+        and lower(utm_Medium) is null
+    )
+    or
+    (--- hubspot sets null to none on contact so is none on MQP
+      lower(utm_source) ='none'
+        and lower(utm_Medium) = 'none'
+    )
+    or 
+      lower(utm_source) like 'direct%'
+      -----and (lower(utm_Medium) = '(none)' 
+      or lower(utm_Medium) = '(not set)'
+      or lower(utm_Medium) like '%direct%'
+    
+    then 'Direct'
+
+      when lower(utm_source) like 'website%'  or lower(utm_Medium) like 'website%'   or lower(utm_Medium) like 'platform' or lower(utm_source) like '%crowdriff%'  or lower(utm_source) like '%localhood%' or lower(utm_source) like '%uberflip%'  or lower(utm_source) like '%webinar%'  or  lower(utm_source) like '%drift%' or  lower(utm_source) like 'ebook%' or lower(utm_source) like 'events %' or lower(utm_Medium) like 'notification%'
+ then 'Direct'
+
+ /* -- Cross-network: Campaign Name contains "cross-network"
+  when REGEXP_CONTAINS(start_campaign_name, r"cross-network")
+    then 'Cross-network'*/
+
+  -- Paid Shopping:
+  --   (Source matches a list of shopping sites
+  --   OR
+  --   Campaign Name matches regex ^(.*(([^a-df-z]|^)shop|shopping).*)$)
+  --   AND
+  --   Medium matches regex ^(.*cp.*|ppc|retargeting|paid.*)$
+  when (
+      source_category = 'SOURCE_CATEGORY_SHOPPING'
+      or REGEXP_CONTAINS(utm_campaign, r"^(.*(([^a-df-z]|^)shop|shopping).*)$")
+    )
+    and REGEXP_CONTAINS(lower(utm_Medium),r"^(.*cp.*|ppc|retargeting|paid.*)$")
+    then 'Paid Shopping'
+
+  -- Paid Search:
+  --   Source matches a list of search sites
+  --   AND
+  --   Medium matches regex ^(.*cp.*|ppc|retargeting|paid.*)$
+  when source_category = 'SOURCE_CATEGORY_SEARCH'
+    and REGEXP_CONTAINS(lower(utm_Medium), r"^(.*cp.*|ppc|retargeting|paid.*)$")
+    then 'Paid Search'
+
+  -- Paid Social:
+  --   Source matches a regex list of social sites
+  --   AND
+  --   Medium matches regex ^(.*cp.*|ppc|retargeting|paid.*)$
+  when source_category = 'SOURCE_CATEGORY_SOCIAL'
+    and REGEXP_CONTAINS(lower(utm_Medium), r"^(.*cp.*|ppc|retargeting|paid.*)$")
+    then 'Paid Social'
+
+  -- Paid Video:
+  --   Source matches a list of video sites
+  --   AND
+  --   Medium matches regex ^(.*cp.*|ppc|retargeting|paid.*)$
+  when source_category = 'SOURCE_CATEGORY_VIDEO'
+    and REGEXP_CONTAINS(lower(utm_Medium),r"^(.*cp.*|ppc|retargeting|paid.*)$")
+    then 'Paid Video'
+
+  -- Display:
+  --   Medium is one of ("display", "banner", "expandable", "interstitial", "cpm")
+  when lower(utm_Medium) in ('display', 'banner', 'expandable', 'interstitial', 'cpm')
+  or lower(utm_source) like 'display%'
+
+    then 'Display'
+
+  -- Paid Other:
+  --   Medium matches regex ^(.*cp.*|ppc|retargeting|paid.*)$
+  when REGEXP_CONTAINS(lower(utm_Medium), r"^(.*cp.*|ppc|retargeting|paid.*)$")
+    then 'Paid Other'
+
+  -- Organic Shopping:
+  --   Source matches a list of shopping sites
+  --   OR
+  --   Campaign name matches regex ^(.*(([^a-df-z]|^)shop|shopping).*)$
+  when source_category = 'SOURCE_CATEGORY_SHOPPING'
+    or REGEXP_CONTAINS(utm_campaign, r"^(.*(([^a-df-z]|^)shop|shopping).*)$")
+    then 'Organic Shopping'
+
+  -- Organic Social:
+  --   Source matches a regex list of social sites
+  --   OR
+  --   Medium is one of ("social", "social-network", "social-media", "sm", "social network", "social media")
+  when source_category = 'SOURCE_CATEGORY_SOCIAL'
+    or ------lower(utm_Medium) in ("social","social-network","social-media","sm","social network","social media")
+    regexp_contains(lower(utm_Medium), r'^(social|social_advertising|social-advertising|social_network|social-network|social_media|social-media|sm|social-unpaid|social_unpaid)$')
+
+    then 'Organic Social'
+
+  -- Organic Video:
+  --   Source matches a list of video sites
+  --   OR
+  --   Medium matches regex ^(.*video.*)$
+  when source_category = 'SOURCE_CATEGORY_VIDEO'
+    or REGEXP_CONTAINS(lower(utm_Medium), r"^(.*video.*)$")
+    then 'Organic Video'
+
+  -- Organic Search:
+  --   Source matches a list of search sites
+  --   OR
+  --   Medium exactly matches organic
+  when source_category = 'SOURCE_CATEGORY_SEARCH' or lower(utm_Medium) = 'organic'
+    then 'Organic Search'
+
+  -- Referral:
+  --   Medium is one of ("referral", "app", or "link") -----marketplace
+
+  when lower(utm_Medium) in ("referral", "app", "link", 'marketplace', 'newsletter','sponsored content', 'sponsored_content')
+  or lower(utm_Medium) like '%affiliate%' 
+  or lower(utm_source) like '%skift%'
+  or lower(utm_source) like '%uberflip%'
+  or lower(utm_Medium) like '%sponsor%' 
+  or  lower(utm_source) like 'sponsor%'
+  or lower(utm_Medium) like 'article%' 
+  or lower(utm_source) like 'article%' 
+  or lower(utm_Medium) like 'skift%' 
+  or lower(utm_source) like 'skift%' 
+  or  lower(utm_source) like '%simpleview%' 
+  or  lower(utm_Medium) like '%simpleview%' 
+  or  lower(utm_source) like '%partner%' 
+  or  lower(utm_Medium) like '%event%'  
+  or  lower(utm_source) like '%event%' 
+    then 'Referral'
+
+
+  -- Email:
+  --   Source = email|e-mail|e_mail|e mail
+  --   OR
+  --   Medium = email|e-mail|e_mail|e mail
+  when REGEXP_CONTAINS(lower(utm_source), r"email|e-mail|e_mail|e mail")
+    or REGEXP_CONTAINS(lower(utm_Medium), r"email|e-mail|e_mail|e mail")
+     or regexp_contains(lower(utm_source), r'^(email|mail|e-mail|e_mail|e mail|mail\.google\.com|sigstr|gnature|the riff|automation|banner)$')
+            or regexp_contains(lower(utm_Medium), r'^(email|mail|e-mail|e_mail|e mail|sigstr|gnature|the riff|automation|banner)$')
+            or lower(utm_source) like '%mail'
+            or lower(utm_source) like '%banner%' or lower(utm_source) like 'hs_email%' or lower(utm_source) like 'hs-email%' or lower(utm_source) like '%blog%' or  lower(utm_Medium) like 'sigstr%' or  lower(utm_Medium) like '%gnature%'or lower(utm_source) like 'sigstr%' or  lower(utm_source) like '%gnature%' or lower(utm_source) like '%the riff% ' or lower(utm_source) like '%automation%' 
+
+    then 'Email'
+
+  -- Affiliates:
+  --   Medium = affiliate
+ /* when lower(utm_Medium) = 'affiliate'
+    then 'Affiliate'*/
+
+  -- Audio:
+  --   Medium exactly matches audio
+  /*when lower(utm_Medium) = 'audio'
+    then 'Audio'*/
+
+  -- SMS:
+  --   Source exactly matches sms
+  --   OR
+  --   Medium exactly matches sms
+ /* when lower(utm_source) = 'sms'
+    or lower(utm_Medium) = 'sms'
+    then 'SMS'*/
+
+  -- Mobile Push Notifications:
+  --   Medium ends with "push"
+  --   OR
+  --   Medium contains "mobile" or "notification"
+  --   OR
+  --   Source exactly matches "firebase"
+ /* when REGEXP_CONTAINS(lower(utm_Medium), r"push$")
+    or REGEXP_CONTAINS(lower(utm_Medium), r"mobile|notification")
+    or lower(utm_source) = 'firebase'
+    then 'Mobile Push Notifications'*/
+
+
+
+  -- Unassigned is the value Analytics uses when there are no other channel rules that match the event data.
+  else 'Other'
+end 
+else '#' end as ChannelGrouping,
+
+ /*
+ 
+ Case
+ when lower(utm_Medium) like '%direct%' or lower(utm_source) like '%direct%'or lower(utm_source) like '%website%'  or lower(utm_Medium) like '%website%'   or lower(utm_Medium) like 'platform' or lower(utm_source) like '%crowdriff%'  or lower(utm_source) like '%localhood%' or lower(utm_source) like '%uberflip%'  or lower(utm_source) like '%webinar%' or lower(utm_source) like '%website%'  or lower(utm_Medium) like '%website%' or  lower(utm_source) like '%drift%' or  lower(utm_source) like 'ebook%' or lower(utm_source) like 'event%' or lower(utm_Medium) like 'notification%'
+ then 'Direct'
+
+
+when lower(utm_source) is null and lower(utm_Medium) is null then 'Direct'
+ 
+when lower(utm_source) is null and
+            regexp_contains(lower(utm_Medium), r'^(\(not set\)|\(none\))$')
+            then 'Direct'
+
+
+
+
+when (regexp_contains(lower(utm_source), r'^(twitter|facebook|fb|instagram|ig|linkedin|lnkd\.in|pinterest)$')
+            and regexp_contains(lower(utm_Medium), r'^(.*cp.*|ppc|paid.*|social_paid)$'))
+            or lower(utm_source) = 'paidsocial'
+            then 'Paid Social'
+
+
+when lower(utm_Medium) in ('paidsearch' ) then 'Paid Search'
+when regexp_contains(lower(utm_source), r'^(google|bing|baidu)$') and
+            regexp_contains(lower(utm_Medium), r'^(.*cp.*|ppc|paid.*)$')
+            then 'Paid Search'
+
+
+when lower(utm_Medium) in ('paidvideo' ) then 'Video Paid'
+        when regexp_contains(lower(utm_source), r'^(youtube|tiktok|vimeo)$')
+            and regexp_contains(lower(utm_Medium), r'^(.*cp.*|ppc|paid.*)$')
+            then 'Paid Video'
+
+ when regexp_contains(lower(utm_Medium), r'^(.*cp.*|ppc|paid.*)$') or lower(utm_source) in ('ppc', 'cpc') or lower(utm_medium) in ('ppc', 'cpc') or lower(utm_Medium) in ('paidother' )
+            then 'Paid Other'
+
+when regexp_contains(lower(utm_Medium), r'^(display|banner|expandable|interstitial|cpm)$') or lower(utm_source) like 'display%'
+            then 'Paid Other' ----'Display'
+
+
+when regexp_contains(lower(utm_Medium), r'^(.*shop.*)$') then 'Organic'
+       
+when regexp_contains(lower(utm_Medium), r'^.*(twitter|t\.co|facebook|instagram|linkedin|lnkd\.in|lnkd\.in|pinterest).*') or
+        regexp_contains(lower(utm_Source), r'^.*(twitter|t\.co|facebook|instagram|linkedin|lnkd\.in|lnkd\.in|pinterest).*') or
+        regexp_contains(lower(utm_Medium), r'^.*(twitter|t\.co|facebook|instagram|linkedin|lnkd\.in|lnkd\.in|pinterest).*')
+            or regexp_contains(lower(utm_Medium), r'^(social|social_advertising|social-advertising|social_network|social-network|social_media|social-media|sm|social-unpaid|social_unpaid)$')
+            then 'Organic'
+           
+       
+when lower(utm_Medium) in  ('youtube', 'tiktok', 'vimeo') or lower(utm_source) in ('youtube', 'tiktok', 'vimeo')
+or lower(utm_Medium) = 'video'
+            then 'Organic' --- include tv
+
+
+when regexp_contains(lower(utm_source), r'^(google|bing|yahoo|baidu|duckduckgo|yandex|ask|adwords|googleads)$')  or lower(utm_Medium) = 'organic'
+            then 'Organic'
+
+
+when regexp_contains(lower(utm_source), r'^(email|mail|e-mail|e_mail|e mail|mail\.google\.com|sigstr|gnature|the riff|automation|banner)$')
+            or regexp_contains(lower(utm_Medium), r'^(email|mail|e-mail|e_mail|e mail|sigstr|gnature|the riff|automation|banner)$')
+            or lower(utm_source) like '%mail'
+            then 'Email'
+
+
+when   lower(utm_source) like '%banner%' or lower(utm_source) like 'hs_email%' or lower(utm_source) like 'hs-email%' or lower(utm_source) like '%blog%' or  lower(utm_Medium) like 'sigstr%' or  lower(utm_Medium) like '%gnature%'or lower(utm_source) like 'sigstr%' or  lower(utm_Source) like '%gnature%' or lower(utm_source) like '%the riff% ' or lower(utm_source) like '%automation% 'then'Email'
+
+
+when lower(utm_Medium) = 'referral' or lower(utm_source) like '%uberflip%' or lower(utm_source) like '%webinar%'  or lower(utm_source) like '%ebook%' or lower(utm_Medium) like '%newsletter%' then 'Referral'
+
+
+when lower(utm_Medium) like 'affiliate%' or lower(utm_Medium) like '%sponsor%' or  lower(utm_source) like 'sponsor%'or lower(utm_Medium) like 'article%' or lower(utm_source) like 'article%' or lower(utm_Medium) like 'skift%' or lower(utm_source) like 'skift%' or  lower(utm_source) like '%simpleview%' or  lower(utm_Medium) like '%simpleview%' or  lower(utm_source) like '%partner%' or  lower(utm_Medium) like '%event%'  or  lower(utm_source) like '%event%' then 'Referral'
+ 
+ when  lower(utm_medium) like '%not set%' then 'Direct'    
+       /* when utm_medium = 'audio'
+            then 'audio'
+        when utm_medium = 'sms'
+            then 'sms'
+        when ends_with(utm_medium, 'push')
+            or regexp_contains(utm_medium, r'.*(mobile|notification).*')
+            then 'mobile_push'*/
+----else 'Other' */
+-----end else '#' end as ChannelGrouping,
+Case when record like 'Hubspot%' or IsMQPEvent = 1 then 
+    Case when  -----regexp_contains(lower(utm_source), r'^(twitter|facebook|fb|instagram|ig|linkedin|lnkd\.in|pinterest)$'
+            regexp_contains(lower(utm_Medium), r'^(.*cp.*|ppc|retargeting|paid.*|social_paid)$')
+            or lower(utm_source) = 'paidsocial'
+            or lower(utm_source) in ('paidsearch' ) 
+            or lower(utm_source) in ('paidvideo' ) 
+            ---or regexp_contains(lower(utm_source), r'^(youtube|tiktok|vimeo)$')
+            or  regexp_contains(lower(utm_Medium), r'^(display|banner|expandable|interstitial|cpm)$') 
+            or lower(utm_source) like 'display%'
+            or lower(utm_source) in ('ppc', 'cpc') 
+            or lower(utm_medium) in ('ppc', 'cpc')
+           then (case when regexp_contains(lower(utm_source), r'^(facebook|fb|instagram|ig)$') then 'Facebook'
+           when regexp_contains(lower(utm_source), r'^(linkedin|lnkd\.in)$')  then 'Linkedin'
+           when regexp_contains(lower(utm_source), r'^(google)$')  then 'Google'
+           when regexp_contains(lower(utm_source), r'^(youtube)$')  then 'YouTube'
+           else 'Other'end)
+           else '#' end
+           else '#' end as Publisher,
+null as Impressions, 
+null as Reach, 
+null as Clicks,
+null as UniqueClicks,
+null as InlineLinkClicks,
+null as UniqueInlineLinkClicks,
+null as OutboundClicks,
+null as InlinePostEngagement,
+null as Spend_CAD,
+null as Spend_USD,
+null as ActionsComment, 
+null as ActionsConversion, 
+null as ActionsCompleteRegistration, 
+null as ActionsLandingPageView, 
+null as ActionsLead, 
+null as ActionsLike, 
+null as ActionsLinkClick, 
+null as ActionsOutboundClick, 
+null as ActionsOffsiteConversionCustom, 
+null as ActionsPageEngagement, 
+null as ActionsPost,  
+null as ActionsPostEngagement, 
+null as ActionsPostReaction,  
+null as ActionsPostSave,  
+null as ActionsViewContent, 
+null as ActionsVideoWatched_3sec, 
+null as ActionsVideoWatched_30sec, 
+null as ActionsVideoWatched_p25, 
+null as ActionsVideoWatched_p50,
+null as ActionsVideoWatched_p75, 
+null as ActionsVideoWatched_p100,
+null as Sessions,
+null as PageViews,
+null as Duration, 
+null as Users, 
+null as NewUsers,
+null as SpendBudget_CAD,
+null as SpendBudget_USD,
+coalesce(CampaignName, '#') as HSCampaignName, 
+Replace(Case when Activity = "MQP(Event)" then "Event Lead"
+  -----when Activity = "MQP(Form)" then 
+  when RelatedFormActivity is not null then RelatedFormActivity
+  when CampaignType is not null then CampaignType
+     when ActivitySubType like '%Content%' then 'HS Content Download'
+    when ActivitySubType like '%Inbound%' and lower(utm_campaign) like '%demo%'  then 'HS Demo Request'
+    when ActivitySubType like '%Inbound%' then  'HS Webinar Registration'
+    when CampaignName is not null then "HS Other" 
+  else '#' end,"HS_","HS ") as HSCampaignType, 
+/*Case when Activity = "MQP(Event)" then "Event Lead"
+  -----when Activity = "MQP(Form)" then 
+  when RelatedFormActivity like 'HS-%' then Replace(RelatedFormActivity,"HS-","") 
+    when ActivitySubType like '%Content%' then 'Content Download'
+    when ActivitySubType like '%Inbound%' and lower(utm_campaign) like '%demo%'  then 'Demo Request'
+    when ActivitySubType like '%Inbound%' then  'Webinar Registration'
+    when CampaignName is not null then "Other" 
+  else '#' end*/
+-------coalesce(HSCampaignName,utm_Campaign, CampaignName, '#') as HSCampaignName, 
+-------coalesce(HSCampaignType,CampaignType, '#') as HSCampaignType, 
+DaystoClosedLost,DaystoCloseWon, DaystoDemoCallBooked, DaystoDiscoCallBooked, DaystoOppAccepted, DaystoOppCreated, DaystoQualCallBooked,
+`NoConnect` ,
+`CallNoShow` ,
+`CallCompleted` ,
+`MovingForward` ,
+`NotMovingForward`,
+coalesce(EmployeeRole, '#') as EmployeeRole,
+coalesce(ProductLine,'#') as ProductLine,
+LHTask,
+Coalesce(MQPProductIntent,CampaignProductLine,'#') as ProductIntent,
+Coalesce(MQPBuyingIntent,CampaignStage,'#')  as BuyingIntent,
+IsTrackedCampaign,
+CampaignQuarterEndDate,
+coalesce(CampaignProductLine,'#') as CampaignProductLine,
+coalesce(CampaignStage,'#') as  CampaignStage, 
+`MQPCreditStartDate`,
+`MQPCreditEndDate`,
+`IsMQPEvent`,
+c.CalendarWeekStart,
+c.CalendarWeekEnd,
+c.CalendarWeeksFromCurrent,
+coalesce(ActivityId, '#') as ActivityId,
+------Case when Activity like 'MQP%' then 0
+------when `IsMQPEvent` = 1 then date_diff(`ActivityDate`+1,Date(`MQPCreditStartDate`, 'America/Toronto'),  Day) end as 
+Case when Record = 'Hubspot Task' then date_diff(c.LatestDay +1,ActivityDate, DAY)  else DaysSinceMQP end as  DaysSinceMQP,
+DaystoDemoCall, 
+DaystoDiscoCall,  
+DaystoQualCall,         
+coalesce(Prospect_UGC,'#') as Prospect_UGC,
+coalesce(Prospect_DAM,'#') as Prospect_DAM,
+coalesce(Prospect_Studio,'#') as Prospect_Studio,
+coalesce(Prospect_Creators,'#') as Prospect_Creators,
+coalesce(Active_Productline,'#') as Active_Productline,
+coalesce(Active_UGC,'#') as Active_UGC,
+coalesce(Active_DAM,'#') as Active_DAM,
+coalesce(Active_Studio,'#') as Active_Studio,
+coalesce(Active_Creators,'#') as Active_Creators,
+coalesce(Active_Customer,'#') as Active_Customer,
+ coalesce(RelatedFormActivity, '#') as RelatedFormActivity,
+ coalesce(RelatedFormSubject,'#') as RelatedFormSubject,
+coalesce(RelatedFormPageURL, '#') as RelatedFormPageURL,
+ coalesce(RelatedMQPTaskId,'#') as RelatedMQPTaskId,
+`RelatedPlatformARR_USD` ,
+`RelatedCreatorARR_USD` ,
+Case when record in ('Hubspot Task', 'Hubspot Form') then c.CalendarWeekEnd else m.CalendarWeekEnd end as RelatedMQPWeekEnd,
+Case when record in ('Hubspot Task', 'Hubspot Form') then c.CalendarMonthEnd else m.CalendarMonthEnd end as RelatedMQPMonthEnd,
+Case when record in ('Hubspot Task', 'Hubspot Form') then c.FiscalQuarterEnd else m.FiscalQuarterEnd end as RelatedMQPQuarterEnd,
+`RelatedPipelinePlatformARR_USD` ,
+`RelatedPipelineCreatorARR_USD` ,
+RelatedSAODate,
+Case when `EventSequence` between 20 and 80 and IsMQPEvent = 1 then Count(ActivityId)
+        OVER (PARTITION BY AccountContactName, ActivityId, Activity, CreatedTimestamp, IsMQPEvent = 1) ---- ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) 
+  when `Activity` like 'MQP%' and IsMQPEvent = 1 then Count(ActivityId)
+        OVER (PARTITION BY AccountContactName, Activity, IsMQPEvent = 1) ---- ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1)       
+        end as MQPRelatedToTask, 
+Case when `EventSequence` between 20 and 80 and IsMQPEvent = 1 and Max(`MQPCreditStartDate`)
+        OVER (PARTITION BY AccountContactName, ActivityId, Activity, CreatedTimestamp, IsMQPEvent = 1) = `MQPCreditStartDate` then ---- ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) 
+       1 
+   when `Activity` like 'MQP%' and IsMQPEvent = 1 and Max(`MQPCreditStartDate`)
+        OVER (PARTITION BY AccountContactName,  Activity,  IsMQPEvent = 1) = `MQPCreditStartDate` then ---- ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) 
+       1     
+       end as LatestMQPTask,         
+RelatedMQPContact,
+RelatedMQPContactId,   
+Coalesce(MQPRejectionReason,'#') as MQPRejectionReason,
+MQPRejectionDate,
+date(MQPCreditStartDate,'America/Toronto') as RelatedMQPDate,  
+DaysSinceSAO,
+coalesce(Prospect_Vision,'#') as Prospect_Vision,
+coalesce(Active_Vision,'#') as Active_Vision,  
+`RelatedVisionARR_USD` ,
+`RelatedPipelineVisionARR_USD` ,
+
+-----coalesce(regexp_extract(HSCampaignName, r'\[(.*?)\]'),'#') as HSCampaignPurpose 
+FROM `crowdriff-revops.bi_business.new_business_conversion_product1` as a 
+join `crowdriff-revops`.`bi_business`.`calendar_adjusted` as c  on c.CalendarDate = ActivityDate 
+left join `crowdriff-revops`.`bi_business`.`calendar_adjusted` as m  on m.CalendarDate = Date(MQPCreditStartDate) 
+left join  `crowdriff-revops.bi_business.ga_source_categories` as s on lower(utm_source) = lower(s.source) 
+where  ----(coalesce(m.CalendarMonthsFromCurrent,c.CalendarMonthsFromCurrent)  between -24 and 0 ) 
+(coalesce(m.FiscalQuartersFromCurrent,c.FiscalQuartersFromCurrent)  between -9 and 0 )and a.Activity is not null 
+/*and a.AccountContactName  in ('San Marcos Convention and Visitor Bureau', 'Destination Irvine' ,"Mt. Hood and Columbia River Gorge Regional Tourism Alliance",'Bloomington-Normal Area Convention & Visitors Bureau','Breckenridge Tourism Office', 'Cambridge Office For Tourism','Destination Madison','Discover Long Island')  and a.Eventsequence between 10 and 80 and a.Activity not like "Call%" and a.activity not like "Email%"*/
+
+Order by AccountContactName, EventOrder   ------)as a 
+---where (MQPRelatedToTask >=1 and LatestMQPTask = 1) or  MQPRelatedToTask is null
+;
