@@ -1,41 +1,646 @@
- DELETE
+DELETE
 FROM
-  `crowdriff-revops`.`bi_business`.`new_business_conversion_product1`
+  `crowdriff-revops`.`bi_business`.`activity_history_hubspot_product1`
 WHERE
   TRUE;
-  
+
 INSERT
-`crowdriff-revops`.`bi_business`.`new_business_conversion_product1`
+`crowdriff-revops`.`bi_business`.`activity_history_hubspot_product1`
+With tmp_hs_emails as (
+SELECT 
+Coalesce(property_salesforcecontactid.value, property_contact_id.value) as SalesforceContactId,
+property_salesforceleadid.value as SalesforceLeadId,
+property_salesforceaccountid.value as SalesforceAccountId,
+Case when coalesce(property_account_name.value, property_company.value) is not null then 'HS-'||coalesce(property_account_name.value, property_company.value) end as Company,
+'HS-'||property_firstname.value ||" "|| property_lastname.value as ContactName,
+vid,
+recipient as Recipient,
+emailcampaignid as HS_CampaignId,
+Case 
+  when REGEXP_CONTAINS (c.name, '(?i)blog|newsletter') then 'HS Blog Email' 
+  when c.type = 'FOLLOWUP_EMAIL' then 'HS Delivery Email' 
+  when REGEXP_CONTAINS (c.name, '(?i)confirmation|delivery')  and not REGEXP_CONTAINS (c.name, '(?i)promo|drip') then 'HS Delivery Email' 
+  when REGEXP_CONTAINS (c.name, '(?i)promo|prospect|nurture|leads|meetup') and not REGEXP_CONTAINS (c.name, '(?i)drip') then 'HS Promo Email' 
+  when REGEXP_CONTAINS (c.name, '(?i)drip|follow|post-webinar|email [0-9]') then 'HS Drip Email' 
+  else 'HS Other Email' end as `EmailType`,
+c.name as `CampaignName`,
+c.type as `CampaignType`,
+c.subject as `CampaignSubject`,
+e.appid,
+e.portalid,
+sentby.id as EmailId,
+date(sentby.created, 'America/Toronto') as SentDate,
+sentby.created as SentTimestamp,
+max(e.`from`) as SentFrom,
+max(REGEXP_EXTRACT(e.`from`,r'<(.+)>')) as EmployeeEmail,
+max(m.`PreferredName`) as EmployeeName, 
+max(m.`RoleDivision`) as EmployeeDivision,
+max(m.`RoleDepartment`) as EmployeeDepartment,
+max(m.`CurrentStatus`) as EmployeeCurrentStatus,
+max(m.`MonthlyStatus`) as EmployeeMonthStatus,
+date(max(e.created), 'America/Toronto') as Email_LastTouchDate,
+-----date(min(sentby.created), 'America/Toronto') as CreatedDate,
+max(INITCAP(location.country)) as Country,
+max(INITCAP(location.city)) as City,
+max(INITCAP(location.state)) as State,
+max(e.appname) as EmailApp,
+round(sum(duration)/1000,0) as Email_SecondsOpen,
+case when count(distinct e.url) > 0 then count(distinct e.url) end as Email_UrlsClickedCount,
+sum(case when e.type = 'OPEN' then 1 end) as Email_OpenCount,
+sum(case when e.type = 'CLICK' then 1 end) as Email_ClickCount,
+max(case when e.type = 'CLICK' then 1  end) as Email_IsClicked,
+max(case when e.type = 'OPEN' then 1  end) as Email_IsOpened,
+max(case when e.type = 'DELIVERED' then 1  end) as Email_IsDelivered,
+max(case when e.type = 'SENT' then 1  end) as Email_IsSent,
+max(case when e.type in ('BOUNCE', 'DROPPED') then 1 end) as Email_IsNotDelivered,
+max(case when e.type = 'SPAMREPORT' then 1  end) as Email_IsFlaggedSpam,
+max(case when e.type = 'STATUSCHANGE' then 1 end) as Email_IsSubscribeChange,
 
 
-With tmp_activity_join as (
-Select a.*,
-o.HasUGC as Prospect_UGC,
-o.HasDam  as Prospect_DAM,
-o.HasStudio  as Prospect_Studio,
-o.HasCreators  as Prospect_Creators,
-o.ProductLine as Related_ProductLine,
-aa.productline as Active_Productline,
-case when aa.products like '%UGC%' then 'UGC' end as Active_UGC,
-case when aa.products like '%DAM%' then 'DAM' end as Active_DAM,
-case when aa.products like '%Studio%' then 'Studio' end as Active_Studio,
-case when aa.products like '%Creators%' then 'Creators' end as Active_Creators,
-case when aa.accountid is not null then 'Customer' end as Active_Customer,
-Case when time(CreatedTimestamp) = '00:00:00' then TIMESTAMP_SUB(TIMESTAMP_ADD(CreatedTimestamp, INTERVAL 24 HOUR), INTERVAL 1 SECOND)  else TIMESTAMP_TRUNC(CreatedTimestamp, SECOND) end  as CreatedTime_Trunc,
-Case when `RelatedOpportunityARR_USD`  >0 then po.PlatformARR_USD end as `RelatedPlatformARR_USD` ,
-Case when `RelatedOpportunityARR_USD`  >0 then po.CreatorARR_USD end as `RelatedCreatorARR_USD` ,
-coalesce(pf.PlatformARR_USD,po.PlatformARR_USD)  as `RelatedPipelinePlatformARR_USD` ,
-coalesce(pf.CreatorARR_USD,po.CreatorARR_USD)  as `RelatedPipelineCreatorARR_USD` ,
-coalesce(pf.PlatformARR_USD+pf.CreatorARR_USD+pf.VisionARR_USD,po.PlatformARR_USD+po.CreatorARR_USD+po.VisionARR_USD)  as `RelatedPipelineARR_USD` ,
-po.DiscoveryAcceptedDate as RelatedSAODate,
-o.HasVision  as Prospect_Vision,
-case when aa.products like '%Vision%' then 'Vision' end as Active_Vision,
-Case when `RelatedOpportunityARR_USD`  >0 then po.VisionARR_USD end as `RelatedVisionARR_USD` ,
-coalesce(pf.VisionARR_USD,po.VisionARR_USD)  as `RelatedPipelineVisionARR_USD`
-/*
-cast( null as string) as `EmailId`,
-cast( null as string) as CampaignName,
-cast( null as string) as CampaignType,
+FROM `crowdriff-revops.raw_hubspot.email_events` as e
+left join `crowdriff-revops.raw_hubspot.contacts` as a on a.property_email.value = e.recipient
+left join `crowdriff-revops.raw_hubspot.campaigns` as c on emailcampaignid = c.id
+------left join `crowdriff-revops`.`raw_salesforce`.`User` as u on lower(u.`email`) = REGEXP_EXTRACT(e.`from`,r'<(.+)>')
+left join  `crowdriff-revops`.`bi_business`.`employee_mapping` as m on m.`workemail` = REPLACE(REGEXP_EXTRACT(e.`from`,r'<(.+)>'), "zoe@", "zoe.weldon@") -----u.`name` 
+   and m.`calendarmonthend` = DATE_SUB(DATE_ADD(DATE_TRUNC(Cast(e.created as date), MONTH), INTERVAL 1 MONTH), INTERVAL 1 DAY)  
+where (REGEXP_CONTAINS (e.`from`, '(?i)crowdriff') or e.`from` is null)
+    and e.sentby.created >= '2019-09-01' and 
+    lower(coalesce(property_account_name.value, property_company.value)) != 'test' and
+    emailcampaignid is not null 
+    and e.type not in ('SUPPRESSED', 'DEFERRED', 'PROCESSED') 
+    ---- exclude Localhood
+        /*and lower(c.subject) not like '%localhood%' 
+        and lower(c.subject) not like '%story network%' 
+        and lower(c.subject) not like '%stories network%'
+        and lower(c.subject) not like '%travel stories%'
+        and lower(c.subject) not like '%short-form video%'
+        and lower(c.subject) not like '%short form video%'*/
+        --- and property_salesforcecontactid.value = '0011C00002P8ca5QAB'
+    and not REGEXP_CONTAINS (c.name, '(?i)customer|SEE|partner|sprint|ops|smb|field event|CSM')
+    and (c.type = 'FOLLOWUP_EMAIL' or 
+      REGEXP_CONTAINS (c.name, '(?i)drip|promo|confirmation|follow|blog|leads|prospect|post-webinar|delivery|nurture|meetup|email [0-9]'))
+
+Group by 
+property_contact_id.value,
+property_salesforcecontactid.value,
+property_salesforceleadid.value,
+property_salesforceaccountid.value,
+property_account_name.value,
+property_company.value,
+property_firstname.value,
+property_lastname.value,
+vid,
+recipient,
+sentby.id,
+sentby.created,
+emailcampaignid,
+c.name,
+c.type,
+c.subject,
+c.subtype,
+e.appid,
+e.portalid)
+
+Select
+'Hubspot Email' as `record`,
+230 as `EventSequence`,
+EmailType as Activity,
+SentDate as `ActivityDate`,  /*
+Coalesce((SELECT Case when OpportunityTypeGroup = 'Renewal' and StageName = 'Closed Won' then 'Customer'
+        when SentDate between CloseDate and LicenseEndDate and StageName = 'Closed Won' then 'Customer'
+        when SentDate > a.`FirstWonStartDate` then 'Past Customer'
+        else 'Prospect' end
+        FROM UNNEST(a.OppDates)  WHERE 
+        SentDate between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or SentDate between DiscoveryHandoverDate and CloseDate
+        or SentDate < DiscoveryHandoverDate
+          ORDER BY CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1),'Prospect') As `CustomerType`,
+(SELECT CloseDate
+        FROM UNNEST(a.OppDates)  WHERE 
+        SentDate between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or SentDate between DiscoveryHandoverDate and CloseDate
+        or SentDate < DiscoveryHandoverDate
+          ORDER BY OpportunityTypeGroup ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) as `RelatedOpportunityCloseDate`,
+(SELECT OpportunityName 
+         FROM UNNEST(a.OppDates)  WHERE 
+        SentDate between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or SentDate between DiscoveryHandoverDate and CloseDate
+        or SentDate < DiscoveryHandoverDate
+          ORDER BY OpportunityTypeGroup ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityName`,
+(SELECT OpportunityId 
+         FROM UNNEST(a.OppDates)  WHERE 
+        SentDate between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or SentDate between DiscoveryHandoverDate and CloseDate
+        or SentDate < DiscoveryHandoverDate
+          ORDER BY OpportunityTypeGroup ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityId`,
+(SELECT OpportunityTypeGroup 
+        FROM UNNEST(a.OppDates)  WHERE 
+        SentDate between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or SentDate between DiscoveryHandoverDate and CloseDate
+        or SentDate < DiscoveryHandoverDate
+          ORDER BY OpportunityTypeGroup ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityTypeGroup`,
+(SELECT StageName 
+        FROM UNNEST(a.OppDates)  WHERE 
+        SentDate between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or SentDate between DiscoveryHandoverDate and CloseDate
+        or SentDate < DiscoveryHandoverDate
+          ORDER BY OpportunityTypeGroup ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityStageName`,
+
+(SELECT ARR_USD 
+         FROM UNNEST(a.OppDates)  WHERE 
+        SentDate between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or SentDate between DiscoveryHandoverDate and CloseDate
+        or SentDate < DiscoveryHandoverDate
+          ORDER BY OpportunityTypeGroup ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityARR_USD`,  
+*/
+ Coalesce((SELECT Case when OpportunityTypeGroup in ('Renewal', 'Addition') and StageName = 'Closed Won' then 'Customer'
+        when Date(SentDate) between CloseDate and LicenseEndDate and StageName = 'Closed Won' then 'Customer'
+        when Date(SentDate) > a.`FirstWonStartDate` then 'Past Customer'
+        else 'Prospect' end
+        FROM UNNEST(a.OppDates)  WHERE 
+        Date(SentDate) between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+        or Date(SentDate) between DiscoveryHandoverDate and CloseDate
+        or Date(SentDate) < DiscoveryHandoverDate
+        
+       -----or Date(Coalesce(t.`mqp_created_date__c`, t.`createddate`),'America/Toronto')  between DiscoveryHandoverDate and CloseDate
+        -------or Date(Coalesce(t.`mqp_created_date__c`, t.`createddate`),'America/Toronto')  < DiscoveryHandoverDate
+          ORDER BY CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1),'Prospect') As `CustomerType`,
+(SELECT CloseDate
+        FROM UNNEST(a.OppDates)  WHERE 
+        coalesce(e.`employeedivision` , 'Marketing')  in ('Customer Success') and Date(SentDate) between DiscoveryHandoverDate and CloseDate and OpportunityTypeGroup = 'Addition' and StageName = 'Closed Won'
+               or  coalesce(e.`employeedivision` , 'Marketing')  in ('Customer Success') and Date(SentDate) between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+                or coalesce(e.`employeedivision` , 'Marketing')  in ('Sales', 'Marketing') and Date(SentDate) between DiscoveryHandoverDate and CloseDate
+        or coalesce(e.`employeedivision` , 'Marketing')  in ('Sales', 'Marketing') and Date(SentDate) < DiscoveryHandoverDate
+          ORDER BY Case when OpportunityTypeGroup = 'New' then 1 when OpportunityTypeGroup = 'Addition' then 2 else 3 end ASC,     DiscoveryHandoverDate ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) as `RelatedOpportunityCloseDate`,
+(SELECT OpportunityName 
+         FROM UNNEST(a.OppDates)  WHERE 
+                 coalesce(e.`employeedivision` , 'Marketing')  in ('Customer Success') and Date(SentDate) between DiscoveryHandoverDate and CloseDate and OpportunityTypeGroup = 'Addition' and StageName = 'Closed Won'
+               or  coalesce(e.`employeedivision` , 'Marketing')  in ('Customer Success') and Date(SentDate) between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+                or coalesce(e.`employeedivision` , 'Marketing')  in ('Sales', 'Marketing') and Date(SentDate) between DiscoveryHandoverDate and CloseDate
+        or coalesce(e.`employeedivision` , 'Marketing')  in ('Sales', 'Marketing') and Date(SentDate) < DiscoveryHandoverDate
+          ORDER BY Case when OpportunityTypeGroup = 'New' then 1 when OpportunityTypeGroup = 'Addition' then 2 else 3 end ASC,     DiscoveryHandoverDate ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityName`,
+(SELECT OpportunityId 
+         FROM UNNEST(a.OppDates)  WHERE 
+                 coalesce(e.`employeedivision` , 'Marketing')  in ('Customer Success') and Date(SentDate) between DiscoveryHandoverDate and CloseDate and OpportunityTypeGroup = 'Addition' and StageName = 'Closed Won'
+               or  coalesce(e.`employeedivision` , 'Marketing')  in ('Customer Success') and Date(SentDate) between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+                or coalesce(e.`employeedivision` , 'Marketing')  in ('Sales', 'Marketing') and Date(SentDate) between DiscoveryHandoverDate and CloseDate
+        or coalesce(e.`employeedivision` , 'Marketing')  in ('Sales', 'Marketing') and Date(SentDate) < DiscoveryHandoverDate
+          ORDER BY Case when OpportunityTypeGroup = 'New' then 1 when OpportunityTypeGroup = 'Addition' then 2 else 3 end ASC,     DiscoveryHandoverDate ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityId`,
+(SELECT OpportunityTypeGroup 
+        FROM UNNEST(a.OppDates)  WHERE 
+       
+                 coalesce(e.`employeedivision` , 'Marketing')  in ('Customer Success') and Date(SentDate) between DiscoveryHandoverDate and CloseDate and OpportunityTypeGroup = 'Addition' and StageName = 'Closed Won'
+               or  coalesce(e.`employeedivision` , 'Marketing')  in ('Customer Success') and Date(SentDate) between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+                or coalesce(e.`employeedivision` , 'Marketing')  in ('Sales', 'Marketing') and Date(SentDate) between DiscoveryHandoverDate and CloseDate
+        or coalesce(e.`employeedivision` , 'Marketing')  in ('Sales', 'Marketing') and Date(SentDate) < DiscoveryHandoverDate
+          ORDER BY Case when OpportunityTypeGroup = 'New' then 1 when OpportunityTypeGroup = 'Addition' then 2 else 3 end ASC,     DiscoveryHandoverDate ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityTypeGroup`,
+(SELECT StageName 
+        FROM UNNEST(a.OppDates)  WHERE 
+                 coalesce(e.`employeedivision` , 'Marketing')  in ('Customer Success') and Date(SentDate) between DiscoveryHandoverDate and CloseDate and OpportunityTypeGroup = 'Addition' and StageName = 'Closed Won'
+               or  coalesce(e.`employeedivision` , 'Marketing')  in ('Customer Success') and Date(SentDate) between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+                or coalesce(e.`employeedivision` , 'Marketing')  in ('Sales', 'Marketing') and Date(SentDate) between DiscoveryHandoverDate and CloseDate
+        or coalesce(e.`employeedivision` , 'Marketing')  in ('Sales', 'Marketing') and Date(SentDate) < DiscoveryHandoverDate
+          ORDER BY Case when OpportunityTypeGroup = 'New' then 1 when OpportunityTypeGroup = 'Addition' then 2 else 3 end ASC,     DiscoveryHandoverDate ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityStageName`,
+(SELECT ARR_USD 
+        FROM UNNEST(a.OppDates)  WHERE 
+       
+                 coalesce(e.`employeedivision` , 'Marketing')  in ('Customer Success') and Date(SentDate) between DiscoveryHandoverDate and CloseDate and OpportunityTypeGroup = 'Addition' and StageName = 'Closed Won'
+               or  coalesce(e.`employeedivision` , 'Marketing')  in ('Customer Success') and Date(SentDate) between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+                or coalesce(e.`employeedivision` , 'Marketing')  in ('Sales', 'Marketing') and Date(SentDate) between DiscoveryHandoverDate and CloseDate
+        or coalesce(e.`employeedivision` , 'Marketing')  in ('Sales', 'Marketing') and Date(SentDate) < DiscoveryHandoverDate
+          ORDER BY Case when OpportunityTypeGroup = 'New' then 1 when OpportunityTypeGroup = 'Addition' then 2 else 3 end ASC,     DiscoveryHandoverDate ASC,  CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityARR_USD`,         
+----*
+0 as `Connect`,
+0 as `NoConnect`,
+----*
+0 as `CallNoShow`,
+0  as `CallCompleted`,
+0 as `MovingForward`,
+0 as `NotMovingForward`,
+0 as `Touch`,
+
+    d.`calendarmonthend`,
+     d.`calendaryyyymmm`,
+    d.`fiscalquarterend`,
+     d.`fiscalyyyyq`,
+ coalesce(a.`Account`, c.`Account`, e.`Company`) as `Account`,
+--- l.`Company`,
+a.`AccountId`,
+Case when a.`AccountId` is not null then 'Account'
+       when c.`SalesforceContactId` like '0031%' then 'Contact' 
+       when length(coalesce(e.`SalesforceLeadId`, cast( e.`vid` as string)))= 8 then 'HSLead' else 'Lead' end as `ActivityStage`, 
+coalesce(a.`AccountId`, c.`SalesforceContactId`, e.`SalesforceLeadId`, cast( e.`vid` as string)) as `AccountContactId`,
+coalesce(a.`Account`, c.`Account`, e.`Company`, c.`ContactName`, e.`ContactName`) as `AccountContactName`, 
+cast( null as string) as `TaskId`,
+cast( null as string) as `EventId`, 
+cast( null as string) as `FormId`, 
+
+----null as `OpportunityName`, 
+-----null as `OpportunityType`, 
+-----null as `OpportunityId`,
+coalesce(c.`ContactName`, e.`ContactName`) as `ContactName`,
+e.SalesforceContactId as `ContactId`,
+---case when t.`whoid` like '00Q%' then t.`whoid` end 
+e.SalesforceLeadId  as `LeadId`,
+cast(vid as Int64) as `HubspotContactId`,
+cast( null as string) as `OpportunityLeadSource`,
+c.`ContactLeadSource`,
+coalesce(e.`EmployeeName`,e.`EmployeeEmail`) as EmployeeName,
+cast( null as string) as `Pod`,
+coalesce(e.`employeedivision` , 'Marketing') ,
+e.`EmployeeDepartment`,
+e.`EmployeeCurrentStatus`,
+---case when e.`hiredmonth` = 'Hired' then 'Hired'
+----  when e.`terminatedmonth` = 'Terminated' then 'Terminated'
+----  else e.`monthlystatus` end as `EmployeeMonthStatus`,
+e.`EmployeeMonthStatus`,
+cast( null as string) as CreatedById,
+cast( null as string) as OwnerId,
+cast( null as string) as OwnerPod,
+cast( null as string) as SalesPod,
+cast( null as string) as OwnerRole,
+cast( null as string) As OwnerProfile,
+coalesce(a.`AccountTier`,c.`AccountTier`) as `AccountTier`,
+coalesce(a.`Region`, c.`Region`, 'Other') as `Region`, 
+coalesce(a.`Country`,c.`Country`, r.`Country`, 'Other') as `Country`,
+coalesce(a.`ReportRegion`, c.`ReportRegion`, r.`ReportingRegion`, 'Other') as `ReportRegion`,
+coalesce(a.`Industry`, c.`Industry`, 'Other') as `Industry`, 
+coalesce(a.`MainIndustry`, c.`MainIndustry`, 'Other') as `MainIndustry`,
+coalesce(a.`Vertical`, c.`Vertical`) as `Vertical`,
+coalesce(a.`DestinationType`, c.`DestinationType`) as `DestinationType`,  
+coalesce(a.`IsTargetAccount`, c.`IsTargetAccount`) as `IsTargetAccount`,
+Case when coalesce(a.`IsTargetAccount`, c.`IsTargetAccount`) is True then 'Target Account' else 'Not Target Account' end as `TargetAccount`,
+coalesce(a.`AccountAcquisitionSource`, c.`ContactLeadSource`,'Direct') as `AccountAcquisitionSource`,
+a.`Reseller`,
+a.`IsReseller`, 
+cast(null as boolean) as `IsStories`,
+SentTimestamp as `CreatedTimestamp`,
+'Hubspot' as ActivityType,
+'Email' as ActivitySubType,
+cast(null as string) as TaskType,
+cast( null as string) as TaskSubType,
+cast( null as string) as Type,
+cast( null as string) as CallType,
+cast( null as string) as CallResult,
+cast(null as boolean) as Answered,
+`CampaignSubject` as Subject,
+c.`ContactStatus` as TaskStatus,
+`EmailId` as ActivityId,
+"#" as ProductLine,
+"#" as description,
+"#" as activity_owner_role__c,
+Case when lower(`CampaignSubject`) like '%localhood%' 
+        or lower(`CampaignSubject`) like '%story network%' or lower(`CampaignSubject`) like '%stories network%'
+        or lower(`CampaignSubject`) like '%travel stories%'
+        or lower(`CampaignSubject`) like '%short-form video%' or lower(`CampaignSubject`)  like '%short form video%'
+        or lower(`CampaignSubject`)  like '%sfv%'
+        or lower(`CampaignSubject`)  like '%creator%'  
+         or lower(`CampaignSubject`)  like '%shorts%' 
+         then 1 end as LHTask,
+  FiscalQuartersFromCurrent,
+CalendarMonthsFromCurrent,
+`EmailId`,
+e.`CampaignName` as CampaignName,
+e.`CampaignType` as CampaignType,
+HS_CampaignId as HS_CampaignId,
+Email_LastTouchDate,
+cast(Email_SecondsOpen as INT64) as Email_SecondsOpen,
+Email_UrlsClickedCount,
+Email_OpenCount,
+Email_ClickCount,
+Email_IsClicked,
+Email_IsOpened,
+Case when Email_IsNotDelivered = 1 then null else Email_IsDelivered end,
+Email_IsSent,
+Email_IsNotDelivered,
+Email_IsFlaggedSpam,
+Email_IsSubscribeChange,
+Cast(null as string) as page_url, 
+Cast(null as string) as url, 
+Cast(null as string) as utm_campaign, 
+Cast(null as string) as utm_source,  
+Cast(null as string) as utm_content,  
+Cast(null as string) as utm_medium,  
+Cast(null as string) as hsa_cam,  
+Cast(null as string) as hsa_grp, 
+Cast(null as string) as hsa_ad, 
+Cast(null as string) as hsa_src, 
+Cast(null as string) as hsa_net, 
+Cast(null as string) as hsa_ver, 
+c.ContactLeadCreatedDate,
+Case when c.ContactLeadCreatedDate =  e.SentDate then True else false end as IsNewContact,
+c.AccountCreatedDate,
+Case when c.AccountCreatedDate =  e.SentDate then True else false end as IsNewAccount,
+Cast(null as string) as RelatedOppLeadSource,
+Cast(null as string) as hsCtaTracking,
+Cast(null as string) as EmployeeRole,
+Cast(null as string) as MQPProductIntent,
+Cast(null as string) as MQPBuyingIntent,
+e.CampaignName as HSCampaignName,
+Cast(null as string) as MQPConversion,
+Cast(null as timestamp)  as MQPConversionDate,
+Cast(null as string)  as SubmissionGuid,  
+CalendarWeekStart,
+CalendarWeekEnd,
+CalendarWeeksFromCurrent,
+case when coalesce(b.HSCampaignName, b2.HSCampaignName) is not null and coalesce(b.HSCampaignName, b2.HSCampaignName) != '' then 1 end as IsTrackedCampaign,
+b.FiscalQuarterEnd as CampaignQuarterEndDate,
+coalesce(b.ProductLine,b2.productline) as CampaignProductLine,
+upper(coalesce(b.Stage,b2.Stage)) as CampaignStage, 
+Cast(null as string) as MQPRejectionReason,
+Cast(null as date) as MQPRejectionDate   
+
+from tmp_hs_emails as e
+join `crowdriff-revops`.`bi_business`.`calendar_standard` as d on e.SentDate = d.`calendardate`
+left join `crowdriff-revops`.`bi_business`.`contact_details1` as c on 
+  c.SalesforceContactId = e.SalesforceContactId
+left join `crowdriff-revops`.`bi_business`.`account_date_summary1` as a on a.`AccountId` =  c.accountid
+  left join (select distinct * from `crowdriff-revops.bi_business.DG_Qtr_CampaignBudget` where FiscalQuarterEnd is not null) as b on b.HSCampaignName = e.CampaignName   and b.FiscalQuarterEnd = d.FiscalQuarterEnd 
+  left join (select distinct * from `crowdriff-revops.bi_business.DG_Qtr_CampaignBudget` where FiscalQuarterEnd is null and coalesce(Budget_CAD,0) = 0) as b2 on b2.HSCampaignName = e.CampaignName and b.FiscalQuarterEnd is null
+left join `crowdriff-revops`.`bi_business`.`CountryRegionCodes`as r on lower(r.`Country`) = lower(e.Country)
+where d.`FiscalQuartersFromCurrent` between -9 and 0
+
+and lower(coalesce(a.`Account`,'null')) NOT LIKE ALL ('%testerson%' , '%crowdriff%','%test %','% test','test', '%ignore %' ,'% ignore%' ,'123','CR','hubspot%'   )
+and lower(coalesce(e.`Company`,'null')) NOT LIKE ALL ('%testerson%' , '%crowdriff%','%test %','% test','test', '%ignore %' ,'% ignore%' ,'123','CR','hubspot%'   )
+and lower(coalesce(c.`ContactName`,'null')) NOT LIKE ALL ('%testerson%' , '%crowdriff%','%test %','% test','test', '%ignore %' ,'% ignore%' ,'123','CR','hubspot%'   )
+and lower(coalesce(e.`ContactName`,'null')) NOT LIKE ALL ('%testerson%' , '%crowdriff%','%test %','% test','test', '%ignore %' ,'% ignore%' ,'123','CR','hubspot%'   )
+
+and (c.SalesforceContactId is not null or coalesce(e.salesforcecontactid,e.salesforceleadid) is null)
+and  (a.`AccountType` not in ('Test') or a.`AccountType` is null)   
+
+UNION ALL
+-------------------------------------------------
+-----form submissions
+
+Select
+'Hubspot Form' as `record`,
+Case when lower(coalesce(b.CampaignType,b2.CampaignType)) like '%demo%' then 10
+   when lower(coalesce(b.CampaignType,b2.CampaignType)) like  '%content%' then 11
+   when lower(coalesce(b.CampaignType,b2.CampaignType)) like  '%webinar%' then 12
+    when lower(coalesce(b.CampaignType,b2.CampaignType)) like '%event%' then 13
+  when lower(coalesce(b.CampaignType,b2.CampaignType)) like  '%email%' then 14
+   when lower(coalesce(b.CampaignType,b2.CampaignType)) like  '%blog%' then 14
+   when lower(coalesce(b.CampaignType,b2.CampaignType)) like  '%contact%' then 14
+	 when lower(coalesce(b.CampaignType,b2.CampaignType)) like  '%quiz%' then 14
+    when lower(coalesce(b.CampaignType,b2.CampaignType)) like '%other%'  then 14
+   
+   when lower(coalesce(b.CampaignType,b2.CampaignType)) is not null then 14
+
+  when (coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%demo%') or (coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%pricing%') then 10 
+  when coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%ebook%' then 11
+  when (coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%download%') or (coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%content%') or (coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%resources%')or (coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%report%') or  (coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%masterclass%')then 11
+  when coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%webinar recording%' then 11    
+  when ( coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%webinar%') or ( coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%registration form%') then 12
+    when ( coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%event%' and lower(form_submissions.value.title) like '%mqp%')   then 13
+   when ( coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%contact%')   then 14
+   when ( coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%quiz%')   then 14
+ 
+  when b.CampaignType = 'Other' or lower(form_submissions.value.title) like '%other%' then 14
+else 200 end as `EventSequence`,
+Case when lower(coalesce(b.CampaignType,b2.CampaignType)) like '%demo%' then 'HS Demo Request'
+   when lower(coalesce(b.CampaignType,b2.CampaignType)) like  '%content%' then 'HS Content Download'
+   when lower(coalesce(b.CampaignType,b2.CampaignType)) like  '%webinar%' then 'HS Webinar Registration'
+  when lower(coalesce(b.CampaignType,b2.CampaignType)) like  '%email%' then 'HS Email'
+   when lower(coalesce(b.CampaignType,b2.CampaignType)) like  '%blog%' then 'HS Blog Subscription' 
+   when lower(coalesce(b.CampaignType,b2.CampaignType)) like  '%contact%' then 'HS Contact Us' 
+	 when lower(coalesce(b.CampaignType,b2.CampaignType)) like  '%quiz%' then 'HS Marketing Quiz' 
+    when lower(coalesce(b.CampaignType,b2.CampaignType)) like '%other%'  then 'HS Other' 
+    when lower(coalesce(b.CampaignType,b2.CampaignType)) like '%event%' then 'HS Event Lead'
+   when lower(coalesce(b.CampaignType,b2.CampaignType)) is not null then 'HS Other' 
+
+when (coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%demo%') or (coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%pricing%') then 'HS Demo Request' 
+ -------when coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%travel stories%' then 'HS Stories Waitlist'
+      when coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%ebook%' then 'HS Content Download'   
+         when (coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%download%') or (coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%content%')  or (coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%resources%') or  (coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%report%') or  (coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%masterclass%') or  (coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%guide%')then 'HS Content Download'
+           when coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%webinar recording%' then 'HS Content Download'    
+          when (coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%webinar%') or ( coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%registration form%') then 'HS Webinar Registration' 
+          when ( coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%event%' and lower(form_submissions.value.title) like '%mqp%') then 'HS Event Lead'
+
+                  when coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%see%' then 'HS SEE Interest'  
+           when coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%event registration%' then 'HS Event Registration'  
+           when(coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%subscription%') or (coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%mail%') or  
+           (coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%blog%') or
+           (coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%sign up%') then 'HS Blog Subscription' 
+            when coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%quiz%' then 'HS Marketing Quiz' 
+            when coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%contact%' then 'HS Contact Us' 
+             when coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%drift%' then 'HS Drift' 
+             when coalesce(b.CampaignType,b2.CampaignType) is null and lower(form_submissions.value.title) like '%roi calculator%' then 'HS ROI Calculator'
+         else 'HS Other' end  as Activity,
+ date(form_submissions.value.timestamp, 'America/Toronto') as `ActivityDate`,         
+/*Coalesce((SELECT Case when OpportunityTypeGroup = 'Renewal' and StageName = 'Closed Won' then 'Customer'
+        when date(form_submissions.value.timestamp, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won' then 'Customer'
+        when date(form_submissions.value.timestamp, 'America/Toronto') > a.`FirstWonStartDate` then 'Past Customer'
+        else 'Prospect' end
+        FROM UNNEST(a.OppDates)  WHERE 
+        date(form_submissions.value.timestamp, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or date(form_submissions.value.timestamp, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1),'Prospect') As `CustomerType`,
+(SELECT CloseDate
+        FROM UNNEST(a.OppDates)  WHERE 
+        date(form_submissions.value.timestamp, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or date(form_submissions.value.timestamp, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY OpportunityTypeGroup ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) as `RelatedOpportunityCloseDate`,
+(SELECT OpportunityName 
+         FROM UNNEST(a.OppDates)  WHERE 
+        date(form_submissions.value.timestamp, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or date(form_submissions.value.timestamp, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY OpportunityTypeGroup ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityName`,
+(SELECT OpportunityId 
+         FROM UNNEST(a.OppDates)  WHERE 
+        date(form_submissions.value.timestamp, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or date(form_submissions.value.timestamp, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY OpportunityTypeGroup ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityId`,
+(SELECT OpportunityTypeGroup 
+        FROM UNNEST(a.OppDates)  WHERE 
+        date(form_submissions.value.timestamp, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or date(form_submissions.value.timestamp, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY OpportunityTypeGroup ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityTypeGroup`,
+(SELECT StageName 
+        FROM UNNEST(a.OppDates)  WHERE 
+        date(form_submissions.value.timestamp, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or date(form_submissions.value.timestamp, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY OpportunityTypeGroup ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityStageName`,
+
+(SELECT ARR_USD 
+         FROM UNNEST(a.OppDates)  WHERE 
+        date(form_submissions.value.timestamp, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or date(form_submissions.value.timestamp, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY OpportunityTypeGroup ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityARR_USD`,  */
+ Coalesce((SELECT Case when OpportunityTypeGroup in ('Renewal', 'Addition') and StageName = 'Closed Won' then 'Customer'
+        when date(form_submissions.value.timestamp, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won' then 'Customer'
+        when date(form_submissions.value.timestamp, 'America/Toronto') > a.`FirstWonStartDate` then 'Past Customer'
+        else 'Prospect' end
+        FROM UNNEST(a.OppDates)  WHERE 
+        date(form_submissions.value.timestamp, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+        or date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or date(form_submissions.value.timestamp, 'America/Toronto') < DiscoveryHandoverDate
+        
+       -----or Date(Coalesce(t.`mqp_created_date__c`, t.`createddate`),'America/Toronto')  between DiscoveryHandoverDate and CloseDate
+        -------or Date(Coalesce(t.`mqp_created_date__c`, t.`createddate`),'America/Toronto')  < DiscoveryHandoverDate
+          ORDER BY CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1),'Prospect') As `CustomerType`,
+(SELECT CloseDate
+        FROM UNNEST(a.OppDates)  WHERE 
+        coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate and OpportunityTypeGroup = 'Addition' and StageName = 'Closed Won'
+               or  coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(form_submissions.value.timestamp, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+                or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(form_submissions.value.timestamp, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY Case when OpportunityTypeGroup = 'New' then 1 when OpportunityTypeGroup = 'Addition' then 2 else 3 end ASC, DiscoveryHandoverDate ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) as `RelatedOpportunityCloseDate`,
+(SELECT OpportunityName 
+         FROM UNNEST(a.OppDates)  WHERE 
+         coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate and OpportunityTypeGroup = 'Addition' and StageName = 'Closed Won'
+               or  coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(form_submissions.value.timestamp, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+                or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(form_submissions.value.timestamp, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY Case when OpportunityTypeGroup = 'New' then 1 when OpportunityTypeGroup = 'Addition' then 2 else 3 end ASC, DiscoveryHandoverDate ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityName`,
+(SELECT OpportunityId 
+         FROM UNNEST(a.OppDates)  WHERE 
+         coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate and OpportunityTypeGroup = 'Addition' and StageName = 'Closed Won'
+               or  coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(form_submissions.value.timestamp, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+                or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(form_submissions.value.timestamp, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY Case when OpportunityTypeGroup = 'New' then 1 when OpportunityTypeGroup = 'Addition' then 2 else 3 end ASC,  DiscoveryHandoverDate ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityId`,
+(SELECT OpportunityTypeGroup 
+        FROM UNNEST(a.OppDates)  WHERE 
+       
+         coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate and OpportunityTypeGroup = 'Addition' and StageName = 'Closed Won'
+               or  coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(form_submissions.value.timestamp, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+                or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(form_submissions.value.timestamp, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY Case when OpportunityTypeGroup = 'New' then 1 when OpportunityTypeGroup = 'Addition' then 2 else 3 end ASC, DiscoveryHandoverDate ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityTypeGroup`,
+(SELECT StageName 
+        FROM UNNEST(a.OppDates)  WHERE 
+         coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate and OpportunityTypeGroup = 'Addition' and StageName = 'Closed Won'
+               or  coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(form_submissions.value.timestamp, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+                or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(form_submissions.value.timestamp, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY Case when OpportunityTypeGroup = 'New' then 1 when OpportunityTypeGroup = 'Addition' then 2 else 3 end ASC,  DiscoveryHandoverDate ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityStageName`,
+(SELECT ARR_USD 
+        FROM UNNEST(a.OppDates)  WHERE 
+       
+         coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate and OpportunityTypeGroup = 'Addition' and StageName = 'Closed Won'
+               or  coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(form_submissions.value.timestamp, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+                or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(form_submissions.value.timestamp, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(form_submissions.value.timestamp, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY Case when OpportunityTypeGroup = 'New' then 1 when OpportunityTypeGroup = 'Addition' then 2 else 3 end ASC, DiscoveryHandoverDate ASC,  CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityARR_USD`,         
+----*
+
+----*
+0 as `Connect`,
+0 as `NoConnect`,
+----*
+0 as `CallNoShow`,
+0  as `CallCompleted`,
+0 as `MovingForward`,
+0 as `NotMovingForward`,
+0 as `Touch`,
+
+    d.`calendarmonthend`,
+     d.`calendaryyyymmm`,
+    d.`fiscalquarterend`,
+     d.`fiscalyyyyq`,
+ coalesce(a.`Account`, c.`Account`, case when property_company.value is not null then 'HS-'||property_company.value end) as `Account`,
+--- l.`Company`,
+a.`AccountId`,
+Case when a.`AccountId` is not null then 'Account'
+       when property_salesforcecontactid.value like '0031%' then 'Contact' 
+       when length(coalesce(a.`AccountId`, property_salesforcecontactid.value, property_salesforceleadid.value, cast(`vid` as STRING))) = 8 then 'HSLead' else 'Lead' end as `ActivityStage`, 
+coalesce(a.`AccountId`, property_salesforcecontactid.value, property_salesforceleadid.value, cast(`vid` as STRING)) as `AccountContactId`,
+coalesce(a.`Account`, c.`Account`, case when property_company.value is not null then 'HS-'||property_company.value end, c.`ContactName`, 'HS-'||property_firstname.value ||" "|| property_lastname.value ) as `AccountContactName`, 
+null as  `TaskId`,
+null as `EventId`, 
+form_submissions.value.conversion_id  as `FormId`,
+
+----null as `OpportunityName`, 
+-----null as `OpportunityType`, 
+-----null as `OpportunityId`,
+coalesce(c.`ContactName`, 'HS-'||property_firstname.value ||" "|| property_lastname.value) as ContactName,
+property_salesforcecontactid.value as `ContactId`,
+---case when t.`whoid` like '00Q%' then t.`whoid` end 
+property_salesforceleadid.value as `LeadId`,
+cast(vid as Int64) as `HubspotContactId`,
+null as `OppLeadSource`,
+c.`ContactLeadSource`,
+case when c.`InboundOwnerDivision` is null then '#' else c.`InboundOwner` end as `EmployeeName`,
+null as `Pod`,
+coalesce(c.`InboundOwnerDivision` , 'Marketing') as `EmployeeDivision`,
+c.`InboundOwnerDepartment` as `EmployeeDepartment`,
+c.`InboundOwnerCurrentStatus` as `EmployeeCurrentStatus`,
+---case when e.`hiredmonth` = 'Hired' then 'Hired'
+----  when e.`terminatedmonth` = 'Terminated' then 'Terminated'
+----  else e.`monthlystatus` end as `EmployeeMonthStatus`,
+null as `EmployeeMonthStatus`,
+null as CreatedById,
+null as OwnerId,
+null as OwnerPod,
+null as SalesPod,
+c.`InboundOwnerRole` as OwnerRole,
+null As OwnerProfile,
+coalesce(a.`AccountTier`,c.`AccountTier`) as `AccountTier`,
+coalesce(a.`Region`, m.`Region`, c.Region, 'Other') as `Region`, 
+coalesce(a.`Country`,m.`Country`,c.Country, 'Other') as `Country`,
+coalesce(a.`ReportRegion`, m.`ReportingRegion`, c.ReportRegion, 'Other') as `ReportRegion`,
+coalesce(a.`Industry`, c.`Industry`, 'Other') as `Industry`, 
+coalesce(a.`MainIndustry`, c.`MainIndustry`, property_main_industry_b.value, 'Other') as `MainIndustry`,
+coalesce(a.`Vertical`, c.`Vertical`) as `Vertical`,
+coalesce(a.`DestinationType`, c.`DestinationType`) as `DestinationType`,  
+coalesce(a.`IsTargetAccount`, c.`IsTargetAccount`) as `IsTargetAccount`,
+Case when coalesce(a.`IsTargetAccount`, c.`IsTargetAccount`) is True then 'Target Account' else 'Not Target Account' end as `TargetAccount`,
+coalesce(a.`AccountAcquisitionSource`, 'Direct') as `AccountAcquisitionSource`,
+a.`Reseller`,
+a.`IsReseller`, 
+null as `IsStories`,
+form_submissions.value.timestamp as `CreatedTimestamp`,
+'Hubspot' as ActivityType,
+'Form Fill' as ActivitySubType,
+null as TaskType,
+null as TaskSubType,
+null as Type,
+null as CallType,
+null as CallResult,
+null as Answered,
+form_submissions.value.title as Subject,
+c.`ContactStatus` as TaskStatus,
+form_submissions.value.conversion_id  as ActivityId,
+coalesce(coalesce(b.ProductLine,b2.productline), "#") as ProductLine,
+"#" as description,
+"#" as activity_owner_role__c,
+Case when lower(form_submissions.value.title) like '%localhood%' 
+        or lower(form_submissions.value.title) like '%story network%' or lower(form_submissions.value.title) like '%stories network%'
+        or lower(form_submissions.value.title) like '%travel stories%'
+        or lower(form_submissions.value.title) like '%short-form video%' or lower(form_submissions.value.title)  like '%short form video%'
+        or lower(form_submissions.value.title)  like '%sfv%'
+        or lower(form_submissions.value.title)  like '%creator%'  
+        or lower(form_submissions.value.title)  like '%shorts%' 
+                 or lower(form_submissions.value.page_url) like '%localhood%' 
+        or lower(form_submissions.value.page_url) like '%story network%' or lower(form_submissions.value.page_url) like '%stories network%'
+        or lower(form_submissions.value.page_url) like '%travel stories%'
+        or lower(form_submissions.value.page_url) like '%short-form video%' or lower(form_submissions.value.page_url)  like '%short form video%'
+        or lower(form_submissions.value.page_url)  like '%sfv%'
+        or lower(form_submissions.value.page_url)  like '%creator%' 
+         or lower(form_submissions.value.page_url)  like '%shorts%'   
+                 then 1 end as LHTask,
+  FiscalQuartersFromCurrent,
+CalendarMonthsFromCurrent,
+cast(null as string) as `EmailId`,
+case when h.HSCampaignName is not null then h.HSCampaignName 
+when lower(form_submissions.value.title) like '%event%' and lower(form_submissions.value.title) like '%mqp%' then 'Other Events'
+when lower(form_submissions.value.title) like '%demo%' or lower(form_submissions.value.title) like '%pricing%' then 'Other Demo Requests' 
+when lower(form_submissions.value.title) like '%ebook%' or  lower(form_submissions.value.title) like '%download%' or lower(form_submissions.value.title) like '%content%'  or lower(form_submissions.value.title) like '%resources%' or  lower(form_submissions.value.title) like '%report%' or  lower(form_submissions.value.title) like '%masterclass%' or lower(form_submissions.value.title) like '%webinar recording%' or lower(form_submissions.value.title) like '%guide%' then 'Other Content Downloads' 
+ when lower(form_submissions.value.title) like '%webinar%' or  lower(form_submissions.value.title) like '%registration form%' then 'Other Webinar Registrations' 
+ when lower(form_submissions.value.title) like '%contact us%' then 'Contact Us' end as CampaignName,
+Case when coalesce(b.CampaignType,b2.CampaignType)  is not null then coalesce(b.CampaignType,b2.CampaignType)
+when lower(form_submissions.value.title) like '%event%' and lower(form_submissions.value.title) like '%mqp%' then 'HS Events'
+when lower(form_submissions.value.title) like '%demo%' or lower(form_submissions.value.title) like '%pricing%' then 'HS Demo Request' 
+when lower(form_submissions.value.title) like '%ebook%' or  lower(form_submissions.value.title) like '%download%' or lower(form_submissions.value.title) like '%content%'  or lower(form_submissions.value.title) like '%resources%' or  lower(form_submissions.value.title) like '%report%' or  lower(form_submissions.value.title) like '%masterclass%' or lower(form_submissions.value.title) like '%webinar recording%'or lower(form_submissions.value.title) like '%guide%' then 'HS Content Download' 
+when lower(form_submissions.value.title) like '%webinar%' or  lower(form_submissions.value.title) like '%registration form%' then 'HS Webinar Registration'
+when lower(form_submissions.value.title) like '%contact%' then 'HS Contact Us' else 'HS Other' end  as CampaignType,
 cast(null as INT64) as HS_CampaignId,
 cast(null as date) as Email_LastTouchDate,
 cast(null as INT64) as Email_SecondsOpen,
@@ -49,9 +654,312 @@ cast(null as INT64) as Email_IsSent,
 cast(null as INT64) as Email_IsNotDelivered,
 cast(null as INT64) as Email_IsFlaggedSpam,
 cast(null as INT64) as Email_IsSubscribeChange,
-Cast(null as string) as page_url, 
+form_submissions.value.page_url as FormPageURL,
+URLDECODE(REGEXP_EXTRACT(form_submissions.value.page_url, r'([^?&#]*)')) as url, 
+coalesce(URLDECODE(REGEXP_EXTRACT(form_submissions.value.page_url, r'utm_campaign=([^?&#]*)')),form_submissions.value.title) as utm_campaign, 
+INITCAP(URLDECODE(REGEXP_EXTRACT(form_submissions.value.page_url, r'utm_source=([^?&#]*)'))) as utm_source,  
+URLDECODE(REGEXP_EXTRACT(form_submissions.value.page_url, r'utm_content=([^?&#]*)')) as utm_content,  
+URLDECODE(REGEXP_EXTRACT(form_submissions.value.page_url, r'utm_medium=([^?&#]*)')) as utm_medium,  
+URLDECODE(REGEXP_EXTRACT(form_submissions.value.page_url, r'hsa_cam=([^?&#]*)')) as hsa_cam,  
+ URLDECODE(REGEXP_EXTRACT(form_submissions.value.page_url, r'hsa_grp=([^?&#]*)')) as hsa_grp, 
+ URLDECODE(REGEXP_EXTRACT(form_submissions.value.page_url, r'hsa_ad=([^?&#]*)')) as hsa_ad, 
+ URLDECODE(REGEXP_EXTRACT(form_submissions.value.page_url, r'hsa_src=([^?&#]*)')) as hsa_src, 
+ URLDECODE(REGEXP_EXTRACT(form_submissions.value.page_url, r'hsa_net=([^?&#]*)')) as hsa_net, 
+ URLDECODE(REGEXP_EXTRACT(form_submissions.value.page_url, r'hsa_ver=([^?&#]*)')) as hsa_ver, 
+c.ContactLeadCreatedDate,
+Case when c.ContactLeadCreatedDate =  date(form_submissions.value.timestamp, 'America/Toronto') then True else false end as IsNewContact,
+c.AccountCreatedDate,
+Case when c.AccountCreatedDate =  date(form_submissions.value.timestamp, 'America/Toronto') then True else false end as IsNewAccount,
+Cast(null as string) as RelatedOppLeadSource,
+ URLDECODE(REGEXP_EXTRACT(form_submissions.value.page_url, r'hsCtaTracking=([^?&#]*)')) as hsCtaTracking,  
+Cast(null as string) as EmployeeRole,
+null as MQPProductIntent,
+null as MQPBuyingIntent,
+case when h.HSCampaignName is not null then h.HSCampaignName 
+when lower(form_submissions.value.title) like '%event%' and lower(form_submissions.value.title) like '%mqp%' then 'Other Events'
+when lower(form_submissions.value.title) like '%demo%' or lower(form_submissions.value.title) like '%pricing%' then 'Other Demo Requests' 
+when lower(form_submissions.value.title) like '%ebook%' or  lower(form_submissions.value.title) like '%download%' or lower(form_submissions.value.title) like '%content%'  or lower(form_submissions.value.title) like '%resources%' or  lower(form_submissions.value.title) like '%report%' or  lower(form_submissions.value.title) like '%masterclass%' or lower(form_submissions.value.title) like '%webinar recording%' or lower(form_submissions.value.title) like '%guide%' then 'Other Content Downloads' 
+when lower(form_submissions.value.title) like '%webinar%' or  lower(form_submissions.value.title) like '%registration form%' then 'Other Webinar Registrations'
+when lower(form_submissions.value.title) like '%contact us%' then 'Contact Us' end as HSCampaignName,
+Cast(null as string) as MQPConversion,
+Cast(null as timestamp)  as MQPConversionDate, 
+Cast(null as string)  as SubmissionGuid,
+CalendarWeekStart,
+CalendarWeekEnd,
+CalendarWeeksFromCurrent,
+case when coalesce(b.HSCampaignName, b2.HSCampaignName) is not null and coalesce(b.HSCampaignName, b2.HSCampaignName) != '' then 1 
+when (lower(form_submissions.value.title) like '%event%' and lower(form_submissions.value.title) like '%mqp%') or
+lower(form_submissions.value.title) like '%demo%' or lower(form_submissions.value.title) like '%pricing%' or
+lower(form_submissions.value.title) like '%ebook%' or  lower(form_submissions.value.title) like '%download%' or lower(form_submissions.value.title) like '%content%'  or lower(form_submissions.value.title) like '%resources%' or  lower(form_submissions.value.title) like '%report%' or  lower(form_submissions.value.title) like '%masterclass%' or lower(form_submissions.value.title) like '%webinar recording%' or lower(form_submissions.value.title) like '%guide%' or
+lower(form_submissions.value.title) like '%webinar%' or  lower(form_submissions.value.title) like '%registration form%' or
+lower(form_submissions.value.title) like '%contact us%' then 1
+end as IsTrackedCampaign,
+b.FiscalQuarterEnd as CampaignQuarterEndDate,
+coalesce(b.ProductLine,b2.productline,'UnMapped') as CampaignProductLine,
+Case when Upper (coalesce(coalesce(b.Stage,b2.Stage),b2.Stage)) is not null then Upper (coalesce(coalesce(b.Stage,b2.Stage),b2.Stage))
+when (lower(form_submissions.value.title) like '%event%' and lower(form_submissions.value.title) like '%mqp%') then 'BOFU'
+when lower(form_submissions.value.title) like '%demo%' or lower(form_submissions.value.title) like '%pricing%' then 'BOFU' 
+when lower(form_submissions.value.title) like '%ebook%' or  lower(form_submissions.value.title) like '%download%' or lower(form_submissions.value.title) like '%content%'  or lower(form_submissions.value.title) like '%resources%' or  lower(form_submissions.value.title) like '%report%' or  lower(form_submissions.value.title) like '%masterclass%' or lower(form_submissions.value.title) like '%webinar recording%' or lower(form_submissions.value.title) like '%guide%' then 'MOFU' 
+when lower(form_submissions.value.title) like '%webinar%' or lower(form_submissions.value.title) like '%registration form%' then 'MOFU'
+when lower(form_submissions.value.title) like '%contact us%' then 'BOFU' end as CampaignStage, 
+Cast(null as string) as MQPRejectionReason,
+Cast(null as date) as MQPRejectionDate
+
+from `raw_hubspot.contacts` as `contacts`,
+UNNEST (form_submissions) as `form_submissions`
+join `crowdriff-revops`.`bi_business`.`calendar_standard` as d on date(form_submissions.value.timestamp, 'America/Toronto') = d.`calendardate`
+left join `raw_hubspot.forms` as `forms` on form_submissions.value.form_id = `forms`.guid
+ left join `crowdriff-revops`.`bi_business`.`contact_details1` as c on 
+  c.SalesforceContactId = coalesce(property_salesforcecontactid.value,property_salesforceleadid.value)
+left join `crowdriff-revops.bi_business.CountryRegionCodes` as m on INITCAP(property_ip_country.value) = m.Country 
+left join `crowdriff-revops`.`bi_business`.`account_date_summary1` as a on a.`AccountId` =  c.accountid
+left  join (select distinct * from `crowdriff-revops.bi_business.HSCampaignMapping`) as h on coalesce(URLDECODE(REGEXP_EXTRACT(form_submissions.value.page_url, r'utm_campaign=([^?&#]*)')),form_submissions.value.title)  = h.AdCampaignName ----or URLDECODE(REGEXP_EXTRACT(form_submissions.value.page_url, r'utm_campaign=([^?&#]*)'))  = h.HSCampaignName
+  left join (select distinct * from `crowdriff-revops.bi_business.DG_Qtr_CampaignBudget` where FiscalQuarterEnd is not null) as b on b.HSCampaignName = h.HSCampaignName   and b.FiscalQuarterEnd = d.FiscalQuarterEnd 
+  left join (select distinct * from `crowdriff-revops.bi_business.DG_Qtr_CampaignBudget` where FiscalQuarterEnd is null and coalesce(Budget_CAD,0) = 0) as b2 on b2.HSCampaignName = h.HSCampaignName and b.FiscalQuarterEnd is null
+where d.`FiscalQuartersFromCurrent` between -9 and 0 and form_submissions.value.title != 'Drift' and  lower(form_submissions.value.title) not like '%career%' and  lower(form_submissions.value.title) not like '%recruitment%' and  lower(form_submissions.value.title) not like '%meetings link%'
+----- exclude Localhood
+  /*and lower(form_submissions.value.title) not like '%travel stories%' and lower(form_submissions.value.title) not like '%story network%' 
+  and lower(form_submissions.value.title) not like '%localhood%' and lower(form_submissions.value.title) not like '%stories network%' 
+   and lower(form_submissions.value.title) not like '%short-form video%' and lower(form_submissions.value.title) not like '%short form video%' */
+and lower(coalesce(a.`Account`,'null')) NOT LIKE ALL ('%testerson%' , '%crowdriff%','%test %','% test','test', '%ignore %' ,'% ignore%' ,'123','CR','hubspot%'   )
+and lower(coalesce(c.`Account`,'null')) NOT LIKE ALL ('%testerson%' , '%crowdriff%','%test %','% test','test', '%ignore %' ,'% ignore%' ,'123','CR','hubspot%'   )
+and lower(coalesce(property_company.value,'null')) NOT LIKE ALL ('%testerson%' , '%crowdriff%','%test %','% test','test', '%ignore %' ,'% ignore%' ,'123','CR','hubspot%'   )
+and lower(coalesce(c.ContactName,'null'))  NOT LIKE ALL ('%testerson%' , '%crowdriff%','%test %','% test','test', '%ignore %' ,'% ignore%' ,'123','CR','hubspot%'   )
+and lower(coalesce(property_firstname.value ||" "|| property_lastname.value,'null'))  NOT LIKE ALL ('%testerson%' , '%crowdriff%','%test %','% test','test', '%ignore %' ,'% ignore%' ,'123','CR','hubspot%'   )
+
+and (c.SalesforceContactId is not null or coalesce(property_salesforcecontactid.value,property_salesforceleadid.value) is null)
+and  (a.`AccountType` not in ('Test') or a.`AccountType` is null)
+
+UNION ALL
+------
+-----------Create additional records for Intersted in Crowdriff Demo flag on Hubspot Form Submissions
+
+
+Select
+'Hubspot Form' as `record`,
+10 as `EventSequence`,
+
+'HS Demo Request'  as Activity,
+ date(createddate, 'America/Toronto') as `ActivityDate`, 
+ /*        
+Coalesce((SELECT Case when OpportunityTypeGroup = 'Renewal' and StageName = 'Closed Won' then 'Customer'
+        when date(createddate, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won' then 'Customer'
+        when date(createddate, 'America/Toronto') > a.`FirstWonStartDate` then 'Past Customer'
+        else 'Prospect' end
+        FROM UNNEST(a.OppDates)  WHERE 
+        date(createddate, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or date(createddate, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1),'Prospect') As `CustomerType`,
+(SELECT CloseDate
+        FROM UNNEST(a.OppDates)  WHERE 
+        date(createddate, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or date(createddate, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY OpportunityTypeGroup ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) as `RelatedOpportunityCloseDate`,
+(SELECT OpportunityName 
+         FROM UNNEST(a.OppDates)  WHERE 
+        date(createddate, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or date(createddate, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY OpportunityTypeGroup ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityName`,
+(SELECT OpportunityId 
+         FROM UNNEST(a.OppDates)  WHERE 
+        date(createddate, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or date(createddate, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY OpportunityTypeGroup ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityId`,
+(SELECT OpportunityTypeGroup 
+        FROM UNNEST(a.OppDates)  WHERE 
+        date(createddate, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or date(createddate, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY OpportunityTypeGroup ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityTypeGroup`,
+(SELECT StageName 
+        FROM UNNEST(a.OppDates)  WHERE 
+        date(createddate, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or date(createddate, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY OpportunityTypeGroup ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityStageName`,
+
+(SELECT ARR_USD 
+         FROM UNNEST(a.OppDates)  WHERE 
+        date(createddate, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+       or date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or date(createddate, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY OpportunityTypeGroup ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityARR_USD`,  
+*/
+Coalesce((SELECT Case when OpportunityTypeGroup in ('Renewal', 'Addition') and StageName = 'Closed Won' then 'Customer'
+        when date(createddate, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won' then 'Customer'
+        when date(createddate, 'America/Toronto') > a.`FirstWonStartDate` then 'Past Customer'
+        else 'Prospect' end
+        FROM UNNEST(a.OppDates)  WHERE 
+        date(createddate, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+        or date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or date(createddate, 'America/Toronto') < DiscoveryHandoverDate
+        
+       -----or Date(Coalesce(t.`mqp_created_date__c`, t.`createddate`),'America/Toronto')  between DiscoveryHandoverDate and CloseDate
+        -------or Date(Coalesce(t.`mqp_created_date__c`, t.`createddate`),'America/Toronto')  < DiscoveryHandoverDate
+          ORDER BY CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1),'Prospect') As `CustomerType`,
+(SELECT CloseDate
+        FROM UNNEST(a.OppDates)  WHERE 
+        coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate and OpportunityTypeGroup = 'Addition' and StageName = 'Closed Won'
+               or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(createddate, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+                or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(createddate, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY Case when OpportunityTypeGroup = 'New' then 1 when OpportunityTypeGroup = 'Addition' then 2 else 3 end ASC,  DiscoveryHandoverDate ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) as `RelatedOpportunityCloseDate`,
+
+(SELECT OpportunityName 
+         FROM UNNEST(a.OppDates)  WHERE 
+                 coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate and OpportunityTypeGroup = 'Addition' and StageName = 'Closed Won'
+               or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(createddate, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+                or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(createddate, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY Case when OpportunityTypeGroup = 'New' then 1 when OpportunityTypeGroup = 'Addition' then 2 else 3 end ASC,   DiscoveryHandoverDate ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityName`,
+(SELECT OpportunityId 
+         FROM UNNEST(a.OppDates)  WHERE 
+                 coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate and OpportunityTypeGroup = 'Addition' and StageName = 'Closed Won'
+               or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(createddate, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+                or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(createddate, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY Case when OpportunityTypeGroup = 'New' then 1 when OpportunityTypeGroup = 'Addition' then 2 else 3 end ASC,   DiscoveryHandoverDate ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityId`,
+(SELECT OpportunityTypeGroup 
+        FROM UNNEST(a.OppDates)  WHERE 
+       
+                coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate and OpportunityTypeGroup = 'Addition' and StageName = 'Closed Won'
+               or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(createddate, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+                or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(createddate, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY Case when OpportunityTypeGroup = 'New' then 1 when OpportunityTypeGroup = 'Addition' then 2 else 3 end ASC,   DiscoveryHandoverDate ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityTypeGroup`,
+(SELECT StageName 
+        FROM UNNEST(a.OppDates)  WHERE 
+                 coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate and OpportunityTypeGroup = 'Addition' and StageName = 'Closed Won'
+               or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(createddate, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+                or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(createddate, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY Case when OpportunityTypeGroup = 'New' then 1 when OpportunityTypeGroup = 'Addition' then 2 else 3 end ASC,  DiscoveryHandoverDate ASC, CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityStageName`,
+(SELECT ARR_USD 
+        FROM UNNEST(a.OppDates)  WHERE 
+               coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate and OpportunityTypeGroup = 'Addition' and StageName = 'Closed Won'
+               or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Customer Success') and date(createddate, 'America/Toronto') between CloseDate and LicenseEndDate and StageName = 'Closed Won'
+                or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(createddate, 'America/Toronto') between DiscoveryHandoverDate and CloseDate
+        or coalesce(c.`InboundOwnerDivision` , 'Marketing') in ('Sales', 'Marketing') and date(createddate, 'America/Toronto') < DiscoveryHandoverDate
+          ORDER BY Case when OpportunityTypeGroup = 'New' then 1 when OpportunityTypeGroup = 'Addition' then 2 else 3 end ASC,   DiscoveryHandoverDate ASC,  CloseDate ASC, LicenseStartDate DESC, LicenseEndDate DESC, OpportunityTypeGroup LIMIT 1) AS `RelatedOpportunityARR_USD`,    
+----*
+0 as `Connect`,
+0 as `NoConnect`,
+----*
+0 as `CallNoShow`,
+0  as `CallCompleted`,
+0 as `MovingForward`,
+0 as `NotMovingForward`,
+0 as `Touch`,
+
+    d.`calendarmonthend`,
+      d.`calendaryyyymmm`,
+    d.`fiscalquarterend`,
+     d.`fiscalyyyyq`,
+ coalesce(a.`Account`, c.`Account`) as `Account`,
+--- l.`Company`,
+a.`AccountId`,
+Case when a.`AccountId` is not null then 'Account'
+       else c.ContactType end as `ActivityStage`, 
+coalesce(a.`AccountId`, SalesforceContactId) as `AccountContactId`,
+coalesce(a.`Account`, c.`Account`, c.`ContactName`) as `AccountContactName`, 
+t.Id as  `TaskId`,
+null as `EventId`, 
+null as `FormId`,
+
+----null as `OpportunityName`, 
+-----null as `OpportunityType`, 
+-----null as `OpportunityId`,
+c.`ContactName`,
+case when t.`whoid` not like '00Q%' then t.`whoid` end as `ContactId`,
+---case when t.`whoid` like '00Q%' then t.`whoid` end 
+case when t.`whoid` like '00Q%' then t.`whoid` end as `LeadId`,
+vid as `HubspotContactId`,
+null as `OppLeadSource`,
+c.`ContactLeadSource`,
+Case when c.`InboundOwnerDivision` is null then '#' else c.`InboundOwner` end as `EmployeeName`,
+null as `Pod`,
+coalesce(c.`InboundOwnerDivision` , 'Marketing') as `EmployeeDivision`,
+c.`InboundOwnerDepartment` as `EmployeeDepartment`,
+c.`InboundOwnerCurrentStatus` as `EmployeeCurrentStatus`,
+---case when e.`hiredmonth` = 'Hired' then 'Hired'
+----  when e.`terminatedmonth` = 'Terminated' then 'Terminated'
+----  else e.`monthlystatus` end as `EmployeeMonthStatus`,
+null as `EmployeeMonthStatus`,
+null as CreatedById,
+null as OwnerId,
+null as OwnerPod,
+null as SalesPod,
+c.`InboundOwnerRole` as OwnerRole,
+null As OwnerProfile,
+coalesce(a.`AccountTier`,c.`AccountTier`) as `AccountTier`,
+coalesce(a.`Region`, m.Region, c.`Region`, 'Other') as `Region`, 
+coalesce(a.`Country`,m.Country, c.`Country`, 'Other') as `Country`,
+coalesce(a.`ReportRegion`, m.ReportingRegion, c.`ReportRegion`, 'Other') as `ReportRegion`,
+coalesce(a.`Industry`, c.`Industry`) as `Industry`, 
+coalesce(a.`MainIndustry`, c.`MainIndustry`) as `MainIndustry`,
+coalesce(a.`Vertical`, c.`Vertical`) as `Vertical`,
+coalesce(a.`DestinationType`, c.`DestinationType`) as `DestinationType`,  
+coalesce(a.`IsTargetAccount`, c.`IsTargetAccount`) as `IsTargetAccount`,
+Case when coalesce(a.`IsTargetAccount`, c.`IsTargetAccount`) is True then 'Target Account' else 'Not Target Account' end as `TargetAccount`,
+coalesce(a.`AccountAcquisitionSource`, c.`ContactLeadSource`) as `AccountAcquisitionSource`,
+a.`Reseller`,
+a.`IsReseller`, 
+null as `IsStories`,
+CreatedDate as `CreatedTimestamp`,
+'Hubspot' as ActivityType,
+'Form Fill' as ActivitySubType,
+null as TaskType,
+null as TaskSubType,
+null as Type,
+null as CallType,
+null as CallResult,
+null as Answered,
+Subject,
+c.`ContactStatus` as TaskStatus,
+t.Id as ActivityId,
+"#" as ProductLine,
+"#" as description,
+"#" as activity_owner_role__c,
+Case when lower(subject) like '%localhood%' 
+        or lower(subject) like '%story network%' or lower(subject) like '%stories network%'
+        or lower(subject) like '%travel stories%'
+        or lower(subject) like '%short-form video%' or lower(subject) like '%short form video%'
+        or lower(subject)  like '%sfv%'
+        or lower(subject)  like '%creator%'  
+         or lower(subject)  like '%shorts%' 
+        or lower(t.description) like '%localhood%' 
+        or lower(t.description) like '%story network%' or lower(t.description) like '%stories network%'
+        or lower(t.description) like '%travel stories%'
+        or lower(t.description) like '%short-form video%' or lower(t.description)  like '%short form video%'
+        or lower(t.description)  like '%sfv%' 
+         or lower(t.description)  like '%creator%' 
+          or lower(t.description)  like '%shorts%' 
+         then 1 end as LHTask,
+  FiscalQuartersFromCurrent,
+CalendarMonthsFromCurrent,
+cast(null as string) as `EmailId`,
+'Other Demo Requests' as CampaignName,
+'HS Demo Request' as CampaignType,
+cast(null as INT64) as HS_CampaignId,
+cast(null as date) as Email_LastTouchDate,
+cast(null as INT64) as Email_SecondsOpen,
+cast(null as INT64) as Email_UrlsClickedCount,
+cast(null as INT64) as Email_OpenCount,
+cast(null as INT64) as Email_ClickCount,
+cast(null as INT64) as Email_IsClicked,
+cast(null as INT64) as Email_IsOpened,
+cast(null as INT64) as Email_IsDelivered,
+cast(null as INT64) as Email_IsSent,
+cast(null as INT64) as Email_IsNotDelivered,
+cast(null as INT64) as Email_IsFlaggedSpam,
+cast(null as INT64) as Email_IsSubscribeChange,
+'Interested in Crowdriff Demo' as page_url, 
 Cast(null as string) as url, 
-Cast(null as string) as utm_campaign, 
+'Interested in Crowdriff Demo' as utm_campaign, 
 Cast(null as string) as utm_source,  
 Cast(null as string) as utm_content,  
 Cast(null as string) as utm_medium,  
@@ -61,370 +969,48 @@ Cast(null as string) as hsa_ad,
 Cast(null as string) as hsa_src, 
 Cast(null as string) as hsa_net, 
 Cast(null as string) as hsa_ver,
-cast(null as date) as ContactLeadCreatedDate,
-cast (null as Boolean) as IsNewContact,
-cast(null as date) as AccountCreatedDate,
-cast (null as Boolean) as IsNewAccount,
-coalesce(o.LeadSource,Cast(null as string)) as RelatedOppLeadSource,
-Cast(null as string) as hsCtaTracking,  */
-from `crowdriff-revops`.`bi_business`.`activity_history_product1` as a
-left join `crowdriff-revops`.`bi_business`.`opportunity_details` as o on o.`OpportunityId` = RelatedOpportunityId
-left join (select OpportunityId, DiscoveryAcceptedDate, Sum(Case when Productline like 'Creator%' then (ARR_USD + OneTimeRevenue_USD) end) as CreatorARR_USD,
-Sum(Case when Productline like 'Vision%' then (ARR_USD + OneTimeRevenue_USD) end) as VisionARR_USD,
-sum(Case when Productline not like 'Creator%' and Productline not like 'Vision%'then (ARR_USD + OneTimeRevenue_USD) end) as PlatformARR_USD,
-from  `crowdriff-revops.bi_business.productline_opportunity_details`
-group by OpportunityId,DiscoveryAcceptedDate) as po on po.OpportunityId = RelatedOpportunityId
-left join   `crowdriff-revops.bi_business.monthly_active_accounts` as aa on aa.AccountId = a.AccountId and aa.MonthEnd = case when o.stagename = 'Closed Won' and a.activitydate >= o.CloseDate then  greatest(a.CalendarMonthEnd, last_day(o.licensestartdate,Month)) else date_trunc(a.CalendarMonthEnd, Month)-1  end
-left join  (select OpportunityId, CalendarDate,Sum(Case when Productline like 'Creator%' then (ARR_USD + OneTimeRevenue_USD) end) as CreatorARR_USD,Sum(Case when Productline like 'Vision%' then (ARR_USD + OneTimeRevenue_USD) end) as VisionARR_USD,
-sum(Case when Productline not like 'Creator%' and Productline not like 'Vision%' then (ARR_USD + OneTimeRevenue_USD) end) as PlatformARR_USD, from `crowdriff-revops.bi_business.productline_pipeline_daily` group by CalendarDate,OpportunityId) as pf on pf.OpportunityId = po.OpportunityId and pf.CalendarDate = greatest(date(po.DiscoveryAcceptedDate), "2023-08-01") 
-        UNION ALL
-Select a.*,
-o.HasUGC as Prospect_UGC,
-o.HasDam  as Prospect_DAM,
-o.HasStudio  as Prospect_Studio,
-o.HasCreators  as Prospect_Creators,
-o.ProductLine as Related_ProductLine,
-aa.productline as Active_Productline,
-case when aa.products like '%UGC%' then 'UGC' end as Active_UGC,
-case when aa.products like '%DAM%' then 'DAM' end as Active_DAM,
-case when aa.products like '%Studio%' then 'Studio' end as Active_Studio,
-case when aa.products like '%Creators%' then 'Creators' end as Active_Creators,
-case when aa.accountid is not null then 'Customer' end as Active_Customer,
-Case when time(CreatedTimestamp) = '00:00:00' then TIMESTAMP_SUB(TIMESTAMP_ADD(CreatedTimestamp, INTERVAL 24 HOUR), INTERVAL 1 SECOND)  else TIMESTAMP_TRUNC(CreatedTimestamp, SECOND) end  as CreatedTime_Trunc,
-Case when `RelatedOpportunityARR_USD`  >0 then po.PlatformARR_USD end as `RelatedPlatformARR_USD` ,
-Case when `RelatedOpportunityARR_USD`  >0 then po.CreatorARR_USD end as `RelatedCreatorARR_USD` ,
-coalesce(pf.PlatformARR_USD,po.PlatformARR_USD)  as `RelatedPipelinePlatformARR_USD` ,
-coalesce(pf.CreatorARR_USD,po.CreatorARR_USD)  as `RelatedPipelineCreatorARR_USD` ,
-coalesce(pf.PlatformARR_USD+pf.CreatorARR_USD+pf.VisionARR_USD,po.PlatformARR_USD+po.CreatorARR_USD+po.VisionARR_USD)  as `RelatedPipelineARR_USD` ,
-po.DiscoveryAcceptedDate as RelatedSAODate,
-o.HasVision  as Prospect_Vision,
-case when aa.products like '%Vision%' then 'Vision' end as Active_Vision,
-Case when `RelatedOpportunityARR_USD`  >0 then po.VisionARR_USD end as `RelatedVisionARR_USD` ,
-coalesce(pf.VisionARR_USD,po.VisionARR_USD)  as `RelatedPipelineVisionARR_USD`
-from `crowdriff-revops`.`bi_business`.`activity_history_hubspot_product1` as a
-left join `crowdriff-revops`.`bi_business`.`opportunity_details` as o on o.`OpportunityId` = RelatedOpportunityId
-left join (select OpportunityId, DiscoveryAcceptedDate, sum(Case when Productline like 'Creator%' then (ARR_USD + OneTimeRevenue_USD) end) as CreatorARR_USD, 
-sum(Case when Productline like 'Vision%' then (ARR_USD + OneTimeRevenue_USD) end) as VisionARR_USD,
-sum(Case when Productline not like 'Creator%' and Productline not like 'Vision%' then (ARR_USD + OneTimeRevenue_USD) end) as PlatformARR_USD,
-from  `crowdriff-revops.bi_business.productline_opportunity_details`
-group by OpportunityId,DiscoveryAcceptedDate) as po on po.OpportunityId = RelatedOpportunityId 
-left join  `crowdriff-revops.bi_business.monthly_active_accounts` as aa on aa.AccountId = a.AccountId and aa.MonthEnd = case when o.stagename = 'Closed Won' and a.activitydate >= o.CloseDate then  greatest(a.CalendarMonthEnd, last_day(o.licensestartdate,Month)) else date_trunc(a.CalendarMonthEnd, Month)-1  end 
-left join  (select OpportunityId, CalendarDate,Sum(Case when Productline like 'Creator%' then (ARR_USD + OneTimeRevenue_USD) end) as CreatorARR_USD,Sum(Case when Productline like 'Vision%' then (ARR_USD + OneTimeRevenue_USD) end) as VisionARR_USD,
-sum(Case when Productline not like 'Creator%' and Productline not like 'Vision%' then (ARR_USD + OneTimeRevenue_USD) end) as PlatformARR_USD, from `crowdriff-revops.bi_business.productline_pipeline_daily` group by CalendarDate,OpportunityId) as pf on pf.OpportunityId = po.OpportunityId and pf.CalendarDate = greatest(date(po.DiscoveryAcceptedDate), "2023-08-01") 
----- Only include emails actually sent, not previously dropped
-where  (Email_IsSent = 1 or `record` = 'Hubspot Form')------ FormId = '8fd591a0-5495-44fa-b797-f9ff7d35fa0e'
-), 
-
-tmp_events as (
-Select max(ActivityDate) OVER (PARTITION BY coalesce(accountid, contactid, LeadId), ------ removed as opps keep getting created, RelatedOpportunityId,
-EventSequence  
-        ORDER BY EventSequence, ActivityDate, CreatedTime_Trunc DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as LastEventDate, 
-max(IF (Activity like 'MQP%', CreatedTime_Trunc, null)) ----IGNORE NULLS)  
-       OVER (PARTITION BY coalesce(accountid, contactid, LeadId)----, --------RelatedOpportunityId------,EventSequence 
-        ORDER BY CreatedTime_Trunc, EventSequence -------ActivityDate, EventSequence, CreatedTimestamp DESC 
-        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-        )  as PreviousMQPDate,
-min(IF (Activity like 'MQP%', CreatedTime_Trunc, null)) ----IGNORE NULLS)  
-       OVER (PARTITION BY coalesce(accountid, contactid, LeadId)----, --------RelatedOpportunityId------,EventSequence 
-        ORDER BY CreatedTime_Trunc, EventSequence  ROWS BETWEEN 1 FOLLOWING and UNBOUNDED FOLLOWING
-        )  as NextMQPDate,
-        CreatedTime_Trunc as CreatedTimestamp,
-        a.* EXCEPT (CreatedTimestamp),
-         
-        from tmp_activity_join  as a 
-      where ---ActivityDate > '2023-02-01' and ---and Account in ('Cannery Row Company','Destination Canada', 'Visit Oslo') and ------LHTask = 1 or
-    ((`CustomerType` in  ('Prospect','Past Customer','Customer') 
-    ---- removed as some requests not correctly assigned  
-    ---  and (EmployeeDivision not in ('Customer Success', 'Management') or EmployeeDivision is null)) 
-    )
-   or `EventSequence` between 70 and 110 ) and (`RelatedOpportunityTypeGroup` != 'Renewal'or `RelatedOpportunityTypeGroup` is null or Activity like '%MQP%'))
-------select * from  tmp_events    where AccountContactName = `EventSequence` <111 order by AccountContactName, ActivityDate, EventSequence
-
-Select 
-case when length(AccountContactId) = 8 then 'HSLead' else ActivityStage end as `ActivityStage`, 
-`AccountContactId`,
-`AccountContactName`, 
-RelatedOpportunityName,
-RelatedOpportunityId,
-`CustomerType`,
-`Record`,
- `Activity`,
-`ActivityDate`,
----Case when `EventSequence` <=100  then 
-Min(`LastEventDate` - 90) OVER (PARTITION BY  AccountContactName,  ------, RelatedOpportunityId,  
-`EventSequence` <=100   
-        ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC) ---end 
-        as `FirstActivityDate`,
----Min(PreviousMQPDate + 91) OVER (PARTITION BY  AccountContactName, RelatedOpportunityId,  `EventSequence` <=100   
-       ---- ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC) ---end 
- /*Case when Activity like 'MQP%' then PreviousMQPDate
- when  (EventSequence between 18 and 90) and CreatedTimestamp > mf.RelatedCreatedTimestamp and CreatedTimestamp <=  Date_add(mf.RelatedCreatedTimestamp, INTERVAL 366 DAY) */
- case when mf.RelatedActivity like 'MQP%' and (e.Eventsequence between 20 and 80  or (e.record = 'Hubspot Form' and mf.RelatedFormFillId = e.ActivityId) or (e.Record = "Hubspot Task" and mf.RelatedMQPTaskId = e.ActivityId)) and CreatedTimestamp <=  Date_add(mf.RelatedCreatedTimestamp, INTERVAL 366 DAY) then mf.RelatedCreatedTimestamp end as MQPCreditStartDate,
- /*Case when Activity like 'MQP%' or ( (EventSequence between 18 and 90 ) and CreatedTimestamp <=  Date_add(mf.RelatedCreatedTimestamp, INTERVAL 366 DAY) )*/
- case when mf.RelatedActivity like 'MQP%' and (e.Eventsequence between 20 and 80  or (e.record = 'Hubspot Form' and mf.RelatedFormFillId = e.ActivityId) or (e.Record = "Hubspot Task" and mf.RelatedMQPTaskId = e.ActivityId)) and CreatedTimestamp <=  Date_add(mf.RelatedCreatedTimestamp, INTERVAL 366 DAY)then Date_add(mf.RelatedCreatedTimestamp, INTERVAL 366 DAY) end  as `MQPCreditEndDate`,
-case when mf.RelatedActivity like 'MQP%' and (e.Eventsequence between 20 and 80  or (e.record = 'Hubspot Form' and mf.RelatedFormFillId = e.ActivityId) or (e.Record = "Hubspot Task" and mf.RelatedMQPTaskId = e.ActivityId)) and CreatedTimestamp <=  Date_add(mf.RelatedCreatedTimestamp, INTERVAL 366 DAY)then 1 end IsMQPEvent,
------Case when  (EventSequence between 18 and 90 ) and CreatedTimestamp <=  Date_add(PreviousMQPDate, INTERVAL 366 DAY)   or Activity like 'MQP%' then 1 end as IsMQPEvent,
-
-----Case when `EventSequence` <=100  then Min(`EventReportDate`) OVER (PARTITION BY  coalesce(accountid, contactid, LeadId), RelatedOpportunityId  
------        ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC) end as `FirstReportDate`,
---------Case when `EventSequence` <=100  and ActivityDate >= `EventReportDate` then `EventReportDate` end as `EventReportStartDate`,
-RANK() OVER (PARTITION BY AccountContactName -------, RelatedOpportunityId  
-ORDER BY CreatedTimestamp, EventSequence) AS EventOrder, ------ActivityDate, EventSequence, CreatedTimestamp DESC) AS EventOrder, 
-
-Case when `EventSequence` <=100  and ActivityDate >= LastEventDate - 90 then RANK() OVER (PARTITION BY  AccountContactName, -----RelatedOpportunityId, 
-EventSequence <=100, ActivityDate >= LastEventDate - 90  
-        ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC) end AS ConvertedEventOrder, 
-Case when (Case when `EventSequence` <=100 and ActivityDate >= LastEventDate - 90 then RANK() OVER (PARTITION BY  AccountContactName, -----RelatedOpportunityId, 
-EventSequence, ActivityDate >= LastEventDate - 90  
-        ORDER BY EventSequence, ActivityDate, CreatedTimestamp DESC) end) = 1 then True else False end as IsFirstEvent,
-
----Case when (Case when `EventSequence` <=100  then RANK() OVER (PARTITION BY  coalesce(accountid, contactid, LeadId), RelatedOpportunityId, EventSequence  
-----       ORDER BY EventSequence, ActivityDate DESC, CreatedTimestamp DESC) end) = 1 then True else False end as IsLastEvent,
------Case when (Case when `EventSequence` <=100  and ActivityDate >= `EventReportDate` - 90 then RANK() OVER (PARTITION BY  coalesce(accountid, contactid, LeadId), -------RelatedOpportunityId, EventSequence, ActivityDate >= EventReportDate - 90  
-------       ORDER BY EventSequence, ActivityDate ASC, CreatedTimestamp DESC) end) = 1 then True else False end as IsReportEvent,
-Case when RelatedOpportunityStageName = 'Closed Won' and ActivityDate <= RelatedOpportunityCloseDate and RelatedOpportunityTypeGroup in ('Addition', 'New') then RelatedOpportunityCloseDate end as RelatedClosedWonDate,  
-Case when RelatedOpportunityStageName like '%Closed%' and ActivityDate <= RelatedOpportunityCloseDate and RelatedOpportunityTypeGroup in ('Addition', 'New') then RelatedOpportunityCloseDate end as RelatedClosedDate,                   
-        
-Case when `EventSequence` <60  then min(Case when EventSequence in (60, 70) then ActivityDate end) OVER (PARTITION BY AccountContactName , RelatedOpportunityId  
-        ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC ROWS BETWEEN CURRENT ROW  and UNBOUNDED FOLLOWING) end as RelatedOppAcceptedDate,
-Case when `EventSequence` <50  then min(Case when EventSequence in (50, 60, 70) then ActivityDate end) OVER (PARTITION BY AccountContactName, RelatedOpportunityId  
-        ORDER BY ActivityDate, EventSequence, CreatedTimestamp  ROWS BETWEEN CURRENT ROW  and UNBOUNDED FOLLOWING) end as RelatedOppCreatedDate,
-Case when `EventSequence` <45  then min(Case when EventSequence in (45) then ActivityDate end) OVER (PARTITION BY AccountContactName, RelatedOpportunityId  
-        ORDER BY ActivityDate, EventSequence, CreatedTimestamp  ROWS BETWEEN CURRENT ROW and UNBOUNDED FOLLOWING) end as RelatedDemoCallDate,
-Case when `EventSequence` <40  then min(Case when EventSequence in (40,45) then ActivityDate end) OVER (PARTITION BY coalesce(accountid, contactid, LeadId), RelatedOpportunityId  
-        ORDER BY ActivityDate, EventSequence, CreatedTimestamp  ROWS BETWEEN CURRENT ROW and UNBOUNDED FOLLOWING) end as RelatedDemoCallBookedDate,
-Case when `EventSequence` <35  then min(Case when EventSequence in (35,40,45) then ActivityDate end) OVER (PARTITION BY AccountContactName, RelatedOpportunityId
-        ORDER BY ActivityDate, EventSequence, CreatedTimestamp  ROWS BETWEEN CURRENT ROW and UNBOUNDED FOLLOWING) end as RelatedDiscoCallDate,
-Case when `EventSequence` <30  then min(Case when EventSequence in (30,35,40,45) then ActivityDate end) OVER (PARTITION BY AccountContactName, RelatedOpportunityId
-        ORDER BY ActivityDate, EventSequence, CreatedTimestamp  ROWS BETWEEN CURRENT ROW and UNBOUNDED FOLLOWING) end as RelatedDiscoCallBookedDate,
-Case when `EventSequence` <25  then min(Case when EventSequence in (25,30,35,40,45) then ActivityDate end) OVER (PARTITION BY coalesce(accountid, contactid, LeadId), RelatedOpportunityId  
-        ORDER BY ActivityDate, EventSequence, CreatedTimestamp ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) end as RelatedQualCallDate,
-Case when `EventSequence` <20  then min(Case when EventSequence in (20,25,30,35,40,45) then ActivityDate end) OVER (PARTITION BY AccountContactName, RelatedOpportunityId  
-        ORDER BY ActivityDate, EventSequence, CreatedTimestamp ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) end as RelatedQualCallBookedDate,
-
-Case when `EventSequence` <80  then Nullif(GREATEST(Date_diff(max(Case when EventSequence in (80) then ActivityDate end) 
-        OVER (PARTITION BY AccountContactName, RelatedOpportunityId ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC  
-        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoClosedLost, 
-
-Case when `EventSequence` <70  then Nullif(GREATEST(Date_diff(max(Case when EventSequence in (70) then ActivityDate end) 
-        OVER (PARTITION BY AccountContactName, RelatedOpportunityId ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC 
-        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoCloseWon,  
-        
-Case when `EventSequence` <60  then Nullif(GREATEST(Date_diff(min(Case when EventSequence in (60, 70) then ActivityDate end) 
-        OVER (PARTITION BY AccountContactName, RelatedOpportunityId ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC 
-        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoOppAccepted,  
-        
-Case when `EventSequence` <50  then Nullif(GREATEST(Date_diff(min(Case when EventSequence in (50, 60, 70) then ActivityDate end) 
-        OVER (PARTITION BY AccountContactName, RelatedOpportunityId ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC
-        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoOppCreated,         
-
-Case when `EventSequence` <45  then Nullif(GREATEST(Date_diff(min(Case when EventSequence in (45) then ActivityDate end) 
-        OVER (PARTITION BY AccountContactName, RelatedOpportunityId ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC
-        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoDemoCall, 
-
-Case when `EventSequence` <40  then Nullif(GREATEST(Date_diff(min(Case when EventSequence in (40,45) then ActivityDate end) 
-        OVER (PARTITION BY AccountContactName, RelatedOpportunityId ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC
-        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoDemoCallBooked,  
-
-Case when `EventSequence` <35  then Nullif(GREATEST(Date_diff(min(Case when EventSequence in (35,40,450) then ActivityDate end) 
-        OVER (PARTITION BY AccountContactName, RelatedOpportunityId  ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC
-        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoDiscoCall,  
-
-Case when `EventSequence` <30  then Nullif(GREATEST(Date_diff(min(Case when EventSequence in (30,35,40,45) then ActivityDate end) 
-        OVER (PARTITION BY AccountContactName, RelatedOpportunityId  ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC
-        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoDiscoCallBooked,  
-        
-Case when `EventSequence` <25  then Nullif(GREATEST(Date_diff(min(Case when EventSequence in (25,30,35,40,45) then ActivityDate end) 
-        OVER (PARTITION BY AccountContactName, RelatedOpportunityId ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC
-        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoQualCall,         
-
-Case when `EventSequence` <20  then Nullif(GREATEST(Date_diff(min(Case when EventSequence in (20,25,30,35,40,45) then ActivityDate end) 
-        OVER (PARTITION BY AccountContactName, RelatedOpportunityId ORDER BY ActivityDate, EventSequence, CreatedTimestamp DESC
-        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING), ActivityDate, DAY),-1),-1) end as DaystoQualCallBooked, 
-       
-        `EventSequence`, 
-        
-        `RelatedOpportunityCloseDate`,
-         `RelatedOpportunityTypeGroup`,
-         `RelatedOpportunityStageName`,
-         `RelatedOpportunityARR_USD`,
-         `Connect`,
-        `NoConnect`,
-        `CallNoShow`,
-        `CallCompleted`,
-        `MovingForward`,
-        `NotMovingForward`,
-        `Touch`,
-        e.`CalendarMonthEnd`,
-        `Calendaryyyymmm`,
-        `FiscalQuarterEnd`,
-         Replace(`Fiscalyyyyq`,'_',' ') as `Fiscalyyyyq`,
-        `Account`,
-        `AccountId`,
-        `TaskId`,
-        `EventId`,
-        `FormId`,
-        `ContactName`,
-         coalesce(`ContactId`,`LeadId`,cast(`HubspotContactId` as STRING)) As ContactId,
-        `LeadId`,
-        `HubspotContactId`,
-         Case when Coalesce(`OpportunityLeadSource`,RelatedOppLeadSource) in ('Inbound','Advertisement','Webinar', 'Trade Show') then 'Inbound' else Coalesce(`OpportunityLeadSource`,RelatedOppLeadSource) end as `OpportunityLeadSource` ,
-         Case when `ContactLeadSource` in ('Inbound','Advertisement','Webinar', 'Trade Show') then 'Inbound' else `ContactLeadSource` end as `ContactLeadSource`,
-        `EmployeeName`,
-        `Pod`,
-        `EmployeeDivision`,
-        `EmployeeDepartment`,
-        `EmployeeCurrentStatus`,
-        `EmployeeMonthStatus`,
-        `CreatedById`,
-        `OwnerId`,
-        `OwnerPod`,
-        `SalesPod`,
-        `OwnerRole`,
-        `OwnerProfile`,
-        `AccountTier`,
-        Coalesce(r.`Region`, e.Region, 'Other') as `Region`,
-         Case when Coalesce(r.`ReportingRegion`, e.ReportRegion, 'Other') in ('NORTH AMERICA', 'EUROPE', 'OCEANIA') then coalesce(r.`Country`,e.`Country`, 'Other') else 'Other' end as Country,
-         Coalesce(r.`ReportingRegion`, e.ReportRegion, 'Other') as ReportRegion,
-        `Industry`,
-        `MainIndustry`,
-        `Vertical`,
-        `DestinationType`,
-        `IsTargetAccount`,
-        `TargetAccount`,
-        `AccountAcquisitionSource`,
-        `Reseller`,
-        `IsReseller`,
-        `IsStories`,
-        `CreatedTimestamp`,
-        `ActivityType`,
-        `ActivitySubType`,
-        `TaskType`,
-        `TaskSubType`,
-        `Type`,
-        `CallType`,
-        `CallResult`,
-        `Answered`,
-        `Subject`,
-        `TaskStatus`,
-        `ActivityId`,
-       `EmailId`,
-coalesce(RelatedFormCampaignName,CampaignName) as CampaignName,
-coalesce(RelatedFormCampaignType,e.CampaignType) as CampaignType,
-HS_CampaignId,
-Email_LastTouchDate,
-Email_SecondsOpen,
-Email_UrlsClickedCount,
-Email_OpenCount,
-Email_ClickCount,
-Email_IsClicked,
-Email_IsOpened,
-Email_IsDelivered,
-Email_IsSent,
-Email_IsNotDelivered,
-Email_IsFlaggedSpam,
-Email_IsSubscribeChange,
-page_url, 
-url, 
-coalesce(RelatedFormUTM_campaign,utm_campaign) as utm_campaign, 
-coalesce(RelatedFormUTM_source, utm_source) as utm_source,  
-coalesce(RelatedFormUTM_Content,utm_content) as utm_content,  
-coalesce(RelatedFormUTM_Medium, utm_medium) as utm_medium,  
-hsa_cam,  
-hsa_grp, 
-hsa_ad, 
-hsa_src, 
-hsa_net, 
-hsa_ver,
-ContactLeadCreatedDate,
------TO DO Add array aggregate limit 1
-Case when IsNewContact is true then "New Contact" end as NewContact,
-AccountCreatedDate,
-Case when IsNewAccount is true then "New Account" end as NewAccount,
-Case when DiscoveryAcceptedDate is not null then 'Accepted Pipeline' end as AcceptedOpp,
-hsCtaTracking,
-JobTitle as EmployeeRole,
-coalesce(Related_ProductLine,e.ProductLine) as ProductLine,
-e.LHTask,
-coalesce(RelatedMQPProductIntent,e.MQPProductIntent) as MQPProductIntent,
-coalesce(RelatedMQPBuyingIntent,e.MQPBuyingIntent) as MQPBuyingIntent,
-e.HSCampaign,
-e.MQPConversion,
-e.MQPConversionDate,
-e.SubmissionGuid,
+c.ContactLeadCreatedDate,
+Case when c.ContactLeadCreatedDate = date(createddate, 'America/Toronto') then True else false end as IsNewContact,
+c.AccountCreatedDate,
+Case when c.AccountCreatedDate = date(createddate, 'America/Toronto') then True else false end as IsNewAccount,
+Cast(null as string) as RelatedOppLeadSource,
+Cast(null as string) as hsCtaTracking,
+Cast(null as string) as EmployeeRole,
+Cast(null as string) as MQPProductIntent,
+'BOFU' as MQPBuyingIntent,
+'Other Demo Requests' as HSCampaign,
+Cast(null as string) as MQPConversion,
+Cast(null as timestamp)  as MQPConversionDate,
+Cast(null as string)  as SubmissionGuid,
 CalendarWeekStart,
 CalendarWeekEnd,
 CalendarWeeksFromCurrent,
-Case when coalesce(RelatedFormCampaignName,CampaignName) is not null and coalesce(RelatedFormCampaignName,CampaignName) != '' then 1 else IsTrackedCampaign end as IsTrackedCampaign,
-coalesce(RelatedFormCampaignQuarterEndDate,CampaignQuarterEndDate) as CampaignQuarterEndDate,
-coalesce(RelatedFormCampaignProductLine,CampaignProductLine,RelatedMQPProductIntent,e.MQPProductIntent) as CampaignProductLine,
-coalesce(RelatedFormCampaignStage,CampaignStage,RelatedMQPBuyingIntent,e.MQPBuyingIntent) as CampaignStage,
-RelatedFormFillId as MQPRelatedFormFillId,
-Prospect_UGC,
-Prospect_DAM,
-Prospect_Studio,
-Prospect_Creators,
-Active_Productline,
-Active_UGC,
-Active_DAM,
-Active_Studio,
-Active_Creators,
-Active_Customer,
-RelatedFormActivity,
-RelatedFormSubject,
-RelatedFormPageURL,
-RelatedMQPTaskId,
-`RelatedPlatformARR_USD` ,
-`RelatedCreatorARR_USD` ,
-`RelatedPipelinePlatformARR_USD` ,
-`RelatedPipelineCreatorARR_USD` ,
-`RelatedPipelineARR_USD` ,
-RelatedSAODate,
-date_diff(e.activitydate, mf.Relatedactivitydate, DAY) as DaysSinceMQP, 
-RelatedMQPContact,
-RelatedMQPContactId,
-MQPRejectionReason,
-MQPRejectionDate,
-Greatest(date_diff(e.activitydate, RelatedSAODate, DAY),0) as DaysSinceSAO,
-Prospect_Vision,
-Active_Vision,
-`RelatedVisionARR_USD` ,
-`RelatedPipelineVisionARR_USD` ,
+1 as IsTrackedCampaign,
+cast (null as date) as CampaignQuarterEndDate,
+'UGC' as CampaignProductLine,
+'BOFU' as CampaignStage,  
+Cast(null as string) as MQPRejectionReason,
+Cast(null as date) as MQPRejectionDate
 
-from tmp_events as e
-left join (select OpportunityId, DiscoveryAcceptedDate from `crowdriff-revops.bi_business.opportunity_details` where DiscoveryAcceptedDate is not null) as o 
-        on o.OpportunityId = RelatedOpportunityId and o.DiscoveryAcceptedDate <= `ActivityDate`
-left join `crowdriff-revops.bi_business.CountryRegionCodes` as r on e.Country = r.Country
--------left join `crowdriff-revops.bi_business.DG_Qtr_CampaignBudget` as b on b.HSCampaignName = e.HSCampaign
-left join `crowdriff-revops.bi_business.employee_mapping` as m on e.`EmployeeName`  = coalesce(m.SalesforceName,m.PreferredName) and e.CalendarMonthEnd = m.CalendarMonthEnd
----left join (select OpportunityId,ProductLine from `crowdriff-revops.bi_business.opportunity_details` ) as p   on p.OpportunityId = RelatedOpportunityId 
-left join (Select TaskId as RelatedMQPTaskId,
-coalesce(RelatedFormCampaignName, CampaignName) as RelatedFormCampaignName,
-coalesce(RelatedFormCampaignType, CampaignType) as RelatedFormCampaignType,
-coalesce(RelatedFormCampaignQuarterEndDate, CampaignQuarterEndDate) as RelatedFormCampaignQuarterEndDate,
-coalesce(RelatedFormCampaignProductLine, CampaignProductLine,MQPProductIntent) as RelatedFormCampaignProductLine,
-coalesce(RelatedFormCampaignStage, CampaignStage,MQPBuyingIntent) as RelatedFormCampaignStage,
-coalesce(RelatedFormUTM_Campaign, utm_campaign) as RelatedFormUTM_Campaign,
-RelatedFormUTM_Source,
-RelatedFormUTM_Content,
-RelatedFormUTM_Medium,
-RelatedFormActivity,
-RelatedFormSubject,
-RelatedFormPageURL,
-RelatedFormFillId,
- MQPProductIntent as RelatedMQPProductIntent,
- MQPBuyingIntent as RelatedMQPBuyingIntent,
-AccountContactName as RelatedAccountContactName,
-createdtimestamp as Relatedcreatedtimestamp,
-ActivityDate as RelatedActivityDate,
-Activity as RelatedActivity,
-ContactName as RelatedMQPContact,
-ContactId as RelatedMQPContactId,
-RelatedDivision
- from `crowdriff-revops.bi_business.mqp_form_mapping` ) as mf 
-                on ((e.TaskId = mf.RelatedMQPTaskId or e.FormId = mf.RelatedFormFillId) and e.Record in ('Hubspot Task', 'Hubspot Form')) or
-                 (mf.RelatedAccountContactName  = e.AccountContactName and e.createdtimestamp >= -----e.PreviousMQPDate = 
-                 cast(mf.Relatedcreatedtimestamp as timestamp) and (e.EventSequence between 18 and 110 )and e.EmployeeDivision = case when e.EmployeeDivision = 'Customer Success' then mf.RelatedDivision else e.EmployeeDivision end)
- -----from `crowdriff-revops.bi_business.mqp_form_mapping` ) as mf                 on (e.TaskId = mf.RelatedMQPTaskId or e.FormId = mf.RelatedFormFillId) and e.Record in ('Hubspot Task', 'Hubspot Form')
-/*where e.AccountContactName  in ('San Marcos Convention and Visitor Bureau', 'Destination Irvine' ,"Mt. Hood and Columbia River Gorge Regional Tourism Alliance",'Bloomington-Normal Area Convention & Visitors Bureau','Breckenridge Tourism Office', 'Cambridge Office For Tourism','Destination Madison','Discover Long Island')  and e.Eventsequence between 10 and 80 and e.Activity not like "Call%" and e.activity not like "Email%"*/
-Order by coalesce(accountid, contactid, LeadId), RelatedOpportunityId, ActivityDate,  EventSequence, CreatedTimestamp DESC;
+
+from `raw_salesforce`.`Task` as t
+join `crowdriff-revops`.`bi_business`.`calendar_standard` as d on date(t.`createddate`, 'America/Toronto') = d.`calendardate`
+left join `crowdriff-revops`.`bi_business`.`contact_details1` as c on c.SalesforceContactId = t.`whoid`
+left join `crowdriff-revops`.`bi_business`.`account_date_summary1` as a on a.`AccountId` =  c.accountid
+left join (select coalesce(property_salesforcecontactid.value,property_salesforceleadid.value) as `SalesforceId`,
+max(INITCAP(property_ip_country.value)) as HS_Country, max(vid) as vid from `raw_hubspot.contacts`  
+        where coalesce(property_salesforcecontactid.value,property_salesforceleadid.value) is not null 
+        group by coalesce(property_salesforcecontactid.value,property_salesforceleadid.value))  as h on c.SalesforceContactId = h.SalesforceId
+left join `crowdriff-revops.bi_business.CountryRegionCodes` as m on HS_Country = m.Country 
+where d.`FiscalQuartersFromCurrent` between -9 and 0 and t.`subject` = 'Demo Request Submitted via Content Download Form'
+---- exclude Localhood
+       /* and tasks.activity_owner_role__c not Like '%Localhood%' and lower(subject) not like '%localhood%' 
+        and lower(subject) not like '%story network%' and lower(subject) not like '%stories network%' and lower(subject) not like '%travel stories%'
+         and lower(subject) not like '%short-form video%' and lower(subject) not like '%short form video%' */
+and  lower(coalesce(a.`Account`,'null')) NOT LIKE ALL ('%testerson%' , '%crowdriff%','%test %','% test','test', '%ignore %' ,'% ignore%' ,'123','CR','hubspot%'   )
+and lower(coalesce(c.`Account`,'null')) NOT LIKE ALL ('%testerson%' , '%crowdriff%','%test %','% test','test', '%ignore %' ,'% ignore%' ,'123','CR','hubspot%'   )
+and lower(coalesce(c.`ContactName`,'null')) NOT LIKE ALL ('%testerson%' , '%crowdriff%','%test %','% test','test', '%ignore %' ,'% ignore%' ,'123','CR','hubspot%'   )
+
+and c.SalesforceContactId is not null
+and (a.`AccountType` not in ('Test') or a.`AccountType` is null);
+
