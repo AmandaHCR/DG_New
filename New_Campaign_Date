@@ -1,0 +1,21 @@
+---- CAPTURE MQPS FROM SALESFORCE
+
+SELECT 
+date(mqp_created_date__c) MQP_Created,
+createddate,
+recent_conversion__c,
+utm_campaign__c,
+buying_intent__c,
+product_intent__c,
+id,
+subject,
+description,
+whoid,
+whatid,
+accountid,
+ownerid,
+status, 
+date(completeddatetime) Completed_Date,
+sales_rejection_reason__c
+FROM `crowdriff-revops.raw_salesforce.Task`
+where is_mqp__c = TRUE
