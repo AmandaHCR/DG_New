@@ -1,0 +1,7 @@
+New Queries
+
+*** All MQPs
+select 
+* 
+from crowdriff-revops.raw_salesforce.Task 
+where is_mqp__c = TRUE
