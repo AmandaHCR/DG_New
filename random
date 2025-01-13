@@ -5,3 +5,128 @@ select
 * 
 from crowdriff-revops.raw_salesforce.Task 
 where is_mqp__c = TRUE
+
+
+With tsp as 
+(Select 
+Case when Record = 'Hubspot Task' then LAG(Case when Record = 'Hubspot Form' then created_tsp_trunc  end) OVER (PARTITION BY AccountContactName,contactname ORDER BY created_tsp_trunc , record,eventsequence) end AS prev_form_tsp,
+
+Case when Record = 'Hubspot Task' then LAG(Case when Record = 'Hubspot Form' then FormId End) OVER (PARTITION BY AccountContactName,contactname ORDER BY   created_tsp_trunc , record,eventsequence) end AS prev_form_id,
+
+Case when Record = 'Hubspot Task' then  LEAD(Case when Record = 'Hubspot Form' then created_tsp_trunc  End) OVER (PARTITION BY AccountContactName,contactname  ORDER BY created_tsp_trunc , record, eventsequence) end AS next_form_tsp,
+
+Case when Record = 'Hubspot Task' then  LEAD(Case when Record = 'Hubspot Form' then FormId End) OVER (PARTITION BY AccountContactName,contactname  ORDER BY  created_tsp_trunc , record,eventsequence) end AS next_form_id,
+
+TIMESTAMP_DIFF(created_tsp_trunc , Case when Record = 'Hubspot Task' then LAG(Case when Record = 'Hubspot Form' then CreatedTimestamp End) OVER (PARTITION BY AccountContactName,contactname ORDER BY created_tsp_trunc ,record,eventsequence) end,MINUTE) as prev_form_diff,
+          
+TIMESTAMP_DIFF(Case when Record = 'Hubspot Task' then LEAD(Case when Record = 'Hubspot Form' then created_tsp_trunc  End) OVER (PARTITION BY AccountContactName
+,contactname ORDER BY created_tsp_trunc , record,eventsequence) end,created_tsp_trunc ,MINUTE) as next_form_diff,           
+            
+created_tsp_trunc  as time, 
+*      
+    
+    from (select *,timestamp_trunc( CreatedTimestamp, SECOND) as created_tsp_trunc from `crowdriff-revops`.`bi_business`.`activity_history_product1` where Record in ('Hubspot Form','Hubspot Task')
+    UNION ALL
+    select *,timestamp_trunc( CreatedTimestamp, SECOND) as created_tsp_trunc  from `crowdriff-revops`.`bi_business`.`activity_history_hubspot_product1`     where Record in ('Hubspot Form','Hubspot Task'))
+    where 
+    Record in ('Hubspot Form','Hubspot Task')
+ORDER BY AccountContactName 
+,contactname,created_tsp_trunc , record, EventSequence
+),
+
+MQP_match as (
+
+Select 
+
+Round(case when next_form_tsp is null then prev_form_diff/60
+when prev_form_tsp is null then next_form_diff/60
+when prev_form_diff <= next_form_diff then prev_form_diff/60 
+when next_form_diff < prev_form_diff then next_form_diff/60 end,2) as RelatedFormFillHours,
+
+------Only match forms to MQPs if timestamp is within 24 hours 
+case when next_form_tsp is null and prev_form_diff <1440 then prev_form_id
+when prev_form_tsp is null and next_form_diff <1440 then next_form_id
+when prev_form_diff <= next_form_diff and prev_form_diff <1440 then prev_form_id 
+when next_form_diff < prev_form_diff and next_form_diff <1440 then next_form_id  end as RelatedFormFillId,
+
+case when next_form_tsp is null and prev_form_diff <1440 then prev_form_tsp
+when prev_form_tsp is null and next_form_diff <1440 then next_form_tsp
+when prev_form_diff <= next_form_diff and prev_form_diff <1440 then prev_form_tsp 
+when next_form_diff < prev_form_diff and next_form_diff <1440 then next_form_tsp  end as RelatedFormFillTimestamp,
+
+time as CreatedTimestamp_trunc,
+CreatedTimestamp,
+TaskId,
+ActivityType,
+ActivitySubType,
+Record,
+Activity,
+ActivityDate,
+AccountContactName,
+ContactName,
+ContactId,
+LeadId,
+Account,
+AccountId,
+CampaignName,
+CampaignType,
+CampaignQuarterEndDate,
+CampaignProductLine,
+CampaignStage,
+MQPProductIntent,
+MQPBuyingIntent,
+utm_campaign,
+prev_form_tsp,
+prev_form_id,
+next_form_tsp,
+next_form_id,
+prev_form_diff,
+next_form_diff,
+employeedivision
+from tsp where Record in ('Hubspot Task') and CreatedTimestamp > '2023-01-31' 
+ORDER BY AccountContactName 
+,contactname,created_tsp_trunc , record, eventsequence)
+
+Select 
+f.CreatedTimestamp as RelatedFormCreatedTimestamp,
+m.RelatedFormFillHours,
+m.RelatedFormFillId,
+m.RelatedFormFillTimestamp,
+m.CreatedTimestamp_trunc,
+m.CreatedTimestamp,
+m.TaskId,
+m.ActivityType,
+m.ActivitySubType,
+m.Record,
+m.Activity,
+m.ActivityDate,
+m.AccountContactName,
+m.ContactName,
+m.ContactId,
+m.LeadId,
+m.Account,
+m.AccountId,
+m.CampaignName,
+m.CampaignType,
+m.CampaignQuarterEndDate,
+m.CampaignProductLine,
+m.CampaignStage,
+m.MQPProductIntent,
+m.MQPBuyingIntent,
+m.utm_campaign,
+f.CampaignName as RelatedFormCampaignName,
+f.CampaignType as RelatedFormCampaignType,
+f.CampaignQuarterEndDate as RelatedFormCampaignQuarterEndDate,
+f.CampaignProductLine as RelatedFormCampaignProductLine,
+f.CampaignStage as RelatedFormCampaignStage,
+f.utm_campaign as RelatedFormUTM_Campaign,
+f.utm_source as RelatedFormUTM_Source,
+f.utm_content as RelatedFormUTM_Content,
+f.utm_medium as RelatedFormUTM_Medium, 
+f.Activity as RelatedFormActivity, 
+f.subject as RelatedFormSubject,
+f.page_url as RelatedFormPageURL,
+f.eventsequence,
+m.employeedivision as RelatedDivision
+from MQP_Match as m
+left join `crowdriff-revops`.`bi_business`.`activity_history_hubspot_product1`as f on RelatedFormFillId = FormId; 
