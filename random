@@ -6,7 +6,7 @@ select
 from crowdriff-revops.raw_salesforce.Task 
 where is_mqp__c = TRUE
 
-
+Grab MQPs
 With tsp as 
 (Select 
 Case when Record = 'Hubspot Task' then LAG(Case when Record = 'Hubspot Form' then created_tsp_trunc  end) OVER (PARTITION BY AccountContactName,contactname ORDER BY created_tsp_trunc , record,eventsequence) end AS prev_form_tsp,
