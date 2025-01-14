@@ -1,3 +1,11 @@
+--- UPDATES NEEDED: 
+1. REMOVE BUDGET AND PUT INTO SEPARATE FILE
+2. SEPARATE TABLES 
+  - CAMPAIGNS WITH BUDGET
+  - CAMPAIGNS WITH ADS
+  - CAMPAIGNS WITH GEO
+
+
 /* Original Scheduled Query: BI_Business_ EOD_Ad_Analytics */
 
 /* Recreates data for Marketing Ads and GA Universal traffic
@@ -9,7 +17,8 @@
 
 */
 
--- DG BUDGET TABLE - GoogleSheets
+-- DG BUDGET TABLE - GoogleSheets [ FINAL ] 
+---- Create the set of tracked campaigns from the external google sheets table where marketing is capturing all of their campaign budget data
 
 DELETE
 FROM
@@ -35,10 +44,12 @@ select * from `crowdriff-revops.bi_business.DGCampaignBudgetQtr`
 UNPIVOT INCLUDE NULLS (Budget for Fiscalyyyyq in (FY2023_Q1,FY2023_Q2,FY2023_Q3,FY2023_Q4,FY2024_Q1,FY2024_Q2,FY2024_Q3,FY2024_Q4,FY2025_Q1,FY2025_Q2,FY2025_Q3,FY2025_Q4,FY2026_Q1,FY2026_Q2,FY2026_Q3,FY2026_Q4))) as b
 Join `crowdriff-revops`.`bi_business`.`calendar_standard` as c on b.Fiscalyyyyq = c.Fiscalyyyyq and IsFiscalQuarterEnd is True ;
 
--- FACEBOOK
+-- AD ANALYTICS WEEKLY TABLE [ TO BE EDITED ] 
 
 DELETE FROM `crowdriff-revops`.`bi_business`.`ad_analytics_weekly` WHERE TRUE;
 INSERT  `crowdriff-revops`.`bi_business`.`ad_analytics_weekly`
+
+-- FACEBOOK
 
 With tmp_extract_date as
 (Select max(date(date_stop)) as Latest_FB_Day
