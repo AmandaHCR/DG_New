@@ -1,0 +1,85 @@
+---- GET CAMPAIGN DAA FROM HUBSPOT / CAMPAIGN UPLOADER
+Case when Upper (coalesce(coalesce(b.Stage,b2.Stage),b2.Stage)) is not null then Upper (coalesce(coalesce(b.Stage,b2.Stage),b2.Stage))
+when (lower(utm_campaign__c) like '%event%' and lower(utm_campaign__c) like '%mqp%') then 'BOFU'
+when lower(utm_campaign__c) like '%demo%' or lower(utm_campaign__c) like '%pricing%' then 'BOFU' 
+when lower(utm_campaign__c) like '%ebook%' or  lower(utm_campaign__c) like '%download%' or lower(utm_campaign__c) like '%content%'  or lower(utm_campaign__c) like '%resources%' or  lower(utm_campaign__c) like '%report%' or  lower(utm_campaign__c) like '%masterclass%' or lower(utm_campaign__c) like '%webinar recording%' or lower(utm_campaign__c) like '%guide%' then 'MOFU' 
+when lower(utm_campaign__c) like '%webinar%' or lower(utm_campaign__c) like '%registration form%' then 'MOFU'
+when lower(utm_campaign__c) like '%contact us%' then 'BOFU' end as CampaignStage,
+
+left join (select distinct * from `crowdriff-revops.bi_business.DG_Qtr_CampaignBudget` where FiscalQuarterEnd is not null) as b on b.HSCampaignName  = h.HSCampaignName   and b.FiscalQuarterEnd = d.FiscalQuarterEnd 
+  left join (select distinct * from `crowdriff-revops.bi_business.DG_Qtr_CampaignBudget` where FiscalQuarterEnd is null and coalesce(Budget_CAD,0) = 0) as b2 on b2.HSCampaignName = h.HSCampaignName and b.FiscalQuarterEnd is null
+
+
+
+
+---- CAPTURE MQPS FROM SALESFORCE
+
+SELECT 
+date(mqp_created_date__c) MQP_Created,
+createddate,
+recent_conversion__c,
+utm_campaign__c,
+buying_intent__c,
+product_intent__c,
+id,
+subject,
+description,
+whoid,
+whatid,
+accountid,
+ownerid,
+status, 
+date(completeddatetime) Completed_Date,
+sales_rejection_reason__c
+FROM `crowdriff-revops.raw_salesforce.Task`
+where is_mqp__c = TRUE
+
+---- CAPTURE OTHER SALES ACTIVITIES FROM SALESFORCE
+id,
+Activitydate,
+Case 
+when t.`activity_type__c` like 'Form Fill%' and t.is_mqp__c is true then 'MQP (Form)'
+when t.`activity_type__c` like 'Event Form Fill%' and t.is_mqp__c is true then 'MQP (Event)'
+when t.`activity_type__c` like '%Form Fill%' and t.is_mqp__c is not true then 'MRL'
+when t.`activity_type__c` like 'MRL%'  then 'MRL'
+when t.`activity_type__c` in ('Qualification Call','Discovery Call','Demo Call','Call', 'Social','EBR Call', 'Strategy Call','Kickoff Call', 'Training Call' ,'Creator UGC Call') then t.`activity_type__c` 
+when t.`activity_type__c` in ('Email') and coalesce(t.`activity_subtype__c`, t.`task_type__c`) like '%Outbound%' then  'Email Sent'
+when t.`activity_type__c` in ('Email') and coalesce(t.`activity_subtype__c`, t.`task_type__c`) like '%Inbound%' then  'Email Reply Received'
+when t.`activity_type__c` in ('Direct Mail') then 'Sent Direct Mail'
+when coalesce(t.`activity_type__c`, t.`type`) like '%Qualification%' then 'Qualification Call'
+when coalesce(t.`activity_type__c`, t.`type`) like '%Discovery%' then 'Discovery Call'
+when coalesce(t.`activity_type__c`, t.`type`) like '%Demo%' then 'Demo Call' 
+when coalesce(t.`activity_type__c`, t.`task_type__c`) like '%Direct Mail%' then  'Sent Direct Mail'
+when coalesce(t.`activity_type__c`, t.`task_type__c`) like '%Call%' then  'Call'
+when coalesce(t.`activity_type__c`, t.`task_type__c`) like '%Voicemail%' then  'Call'
+when coalesce(t.`activity_subtype__c`, t.`task_type__c`) like '%InMail%' then 'Social'
+when coalesce(t.`activity_subtype__c`, t.`task_type__c`) like '%Outbound%' then  'Email Sent'
+when coalesce(t.`activity_subtype__c`, t.`task_type__c`) like '%Inbound%' then  'Email Reply Received'
+        else 'Other Task' end as  Activity,
+whoid,
+whatid,
+accountid,
+ownerid,
+status,
+date(completeddatetime) Completed_Date
+FROM `crowdriff-revops.raw_salesforce.Task`
+
+---- CAPTURE OPPORTUNITIES FROM SALESFORCE: Need to tie to MQPs. If the MQP was created before the opportunity was accepted
+
+SELECT 
+opportunity_accepted_date__c, 
+closedate, 
+createddate, 
+id, 
+text_account_name_feb_2019__c, 
+accountid, 
+amount, 
+type, 
+amount_platform__c, 
+amount_creators__c 
+FROM `crowdriff-revops.raw_salesforce.Opportunity` 
+
+
+---- GET ACCOUNT DATE DATA
+
+`crowdriff-revops`.`bi_business`.`account_date_summary1`
